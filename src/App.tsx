@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -68,27 +68,30 @@ export default function App() {
     return () => clearInterval(timer);
   }, [activePage?.id]);
 
-  const handleUpdateActivePage = (updated: DiaryPage | ((prev: DiaryPage) => DiaryPage)) => {
-    setPages((prev) => {
-      let targetId = activePageId;
-      if (!prev.some((p) => p.id === targetId) && prev.length > 0) {
-        targetId = prev[0].id;
-        setActivePageId(targetId);
-      }
-      return prev.map((p) => {
-        if (p.id === targetId) {
-          const next = typeof updated === 'function' ? updated(p) : updated;
-          if (next.id && next.id !== targetId) {
-            setActivePageId(next.id);
-          }
-          return next;
+  const handleUpdateActivePage = useCallback(
+    (updated: DiaryPage | ((prev: DiaryPage) => DiaryPage)) => {
+      setPages((prev) => {
+        let targetId = activePageId;
+        if (!prev.some((p) => p.id === targetId) && prev.length > 0) {
+          targetId = prev[0].id;
+          setActivePageId(targetId);
         }
-        return p;
+        return prev.map((p) => {
+          if (p.id === targetId) {
+            const next = typeof updated === 'function' ? updated(p) : updated;
+            if (next.id && next.id !== targetId) {
+              setActivePageId(next.id);
+            }
+            return next;
+          }
+          return p;
+        });
       });
-    });
-  };
+    },
+    [activePageId]
+  );
 
-  const handleCreateNewPage = () => {
+  const handleCreateNewPage = useCallback(() => {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const newPage: DiaryPage = {
@@ -142,7 +145,7 @@ export default function App() {
 
     setPages((prev) => [newPage, ...prev]);
     setActivePageId(newPage.id);
-  };
+  }, []);
 
   // Allow deleting any page, including the very last one
   const handleDeletePage = (pageId: string) => {

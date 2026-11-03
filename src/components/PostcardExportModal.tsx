@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Check, Sparkles, Calendar as CalendarIcon } from 'lucide-react';
+import { X, Download, Check, Calendar as CalendarIcon, ArrowLeft } from 'lucide-react';
 import { DiaryPage } from '../types/worryTree';
 
 interface PostcardExportModalProps {
@@ -14,6 +14,7 @@ type PaperThemeId = 'ivory' | 'blush' | 'midnight';
 interface PaperTheme {
   id: PaperThemeId;
   label: string;
+  swatch: string;
   bg: string;
   cardBorder: string;
   innerBorder: string;
@@ -23,47 +24,54 @@ interface PaperTheme {
   accentHeart: string;
   accentFill: string;
   pillBg: string;
+  stampBg: string;
 }
 
 const PAPER_THEMES: Record<PaperThemeId, PaperTheme> = {
   ivory: {
     id: 'ivory',
     label: 'Warm Ivory',
-    bg: '#faf9f6',
-    cardBorder: '#d4d4d8',
-    innerBorder: '#e4e4e7',
+    swatch: '#faf9f6',
+    bg: '#faf8f3',
+    cardBorder: '#d6d2c8',
+    innerBorder: '#e7e3da',
     inkPrimary: '#18181b',
-    inkSecondary: '#52525b',
-    inkMuted: '#71717a',
+    inkSecondary: '#4a4843',
+    inkMuted: '#78746c',
     accentHeart: '#be123c',
     accentFill: '#ffe4e6',
-    pillBg: '#f4f4f5',
+    pillBg: '#f3efe6',
+    stampBg: '#f5f2ea',
   },
   blush: {
     id: 'blush',
     label: 'Soft Blush',
-    bg: '#fdf8f8',
-    cardBorder: '#e5d5d7',
-    innerBorder: '#f0e4e6',
+    swatch: '#fdf6f6',
+    bg: '#fcf6f6',
+    cardBorder: '#e4d2d4',
+    innerBorder: '#efe2e4',
     inkPrimary: '#271c1e',
-    inkSecondary: '#5c4b4e',
-    inkMuted: '#8c767a',
+    inkSecondary: '#5a484b',
+    inkMuted: '#8a7377',
     accentHeart: '#be123c',
     accentFill: '#ffe4e6',
-    pillBg: '#f7eced',
+    pillBg: '#f6ebec',
+    stampBg: '#f8eef0',
   },
   midnight: {
     id: 'midnight',
     label: 'Quiet Night',
-    bg: '#18181b',
-    cardBorder: '#3f3f46',
-    innerBorder: '#27272a',
+    swatch: '#18181b',
+    bg: '#161619',
+    cardBorder: '#383840',
+    innerBorder: '#27272d',
     inkPrimary: '#f4f4f5',
     inkSecondary: '#d4d4d8',
-    inkMuted: '#a1a1aa',
+    inkMuted: '#9ca3af',
     accentHeart: '#fb7185',
     accentFill: '#4c0519',
-    pillBg: '#27272a',
+    pillBg: '#202026',
+    stampBg: '#232329',
   },
 };
 
@@ -88,6 +96,19 @@ export const formatReadableSchedule = (dateStr?: string, timeStr?: string, fallb
     }
   }
   return fallbackWhen || '';
+};
+
+const splitReframeParts = (rawReframe: string): { quote: string; sub: string } => {
+  const trimmed = rawReframe.trim();
+  // Match leading curly or straight quote block
+  const match = trimmed.match(/^(“[^”]+”|"[^"]+")\s*(.*)$/s);
+  if (match) {
+    return {
+      quote: match[1].trim(),
+      sub: (match[2] || '').trim(),
+    };
+  }
+  return { quote: trimmed, sub: '' };
 };
 
 const deriveResolutionDetails = (page: DiaryPage) => {
@@ -193,9 +214,10 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
 
   const theme = PAPER_THEMES[themeId];
   const worryText = page.rootWorry?.trim() || 'An unspoken heavy thought';
-  const reframeText =
+  const rawReframe =
     page.positiveReframe?.trim() ||
-    '“I know this feels heavy right now.” But you do not have to carry the whole future today—one gentle breath is enough.';
+    '“Do I need to have this completely solved right now, or can I take just one calm step first?” You do not have to carry the whole weight of this at once—one gentle breath is enough.';
+  const reframeParts = splitReframeParts(rawReframe);
   const resolution = deriveResolutionDetails(page);
   const categoryLabel = (page.category || 'general').toLowerCase();
   const dateLabel = (page.date || 'today').toLowerCase();
@@ -205,7 +227,7 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
     try {
       const scale = 3; // Crisp 3x Retina Postcard
       const width = 640;
-      const height = 780;
+      const height = 760;
 
       const canvas = document.createElement('canvas');
       canvas.width = width * scale;
@@ -219,24 +241,24 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
       ctx.fillStyle = theme.bg;
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Subtle Editorial Double Frame
+      // 2. Editorial Double Frame + Corner Accents
       ctx.strokeStyle = theme.cardBorder;
       ctx.lineWidth = 1.2;
-      ctx.strokeRect(24, 24, width - 48, height - 48);
+      ctx.strokeRect(22, 22, width - 44, height - 44);
 
       ctx.strokeStyle = theme.innerBorder;
-      ctx.lineWidth = 0.8;
-      ctx.strokeRect(30, 30, width - 60, height - 60);
+      ctx.lineWidth = 0.9;
+      ctx.strokeRect(29, 29, width - 58, height - 58);
 
-      // 3. Top Header: Brand wordmark + loop on left, Date & Category on right
+      // 3. Top Header: Brand wordmark + loop on left, Postmark Stamp on right
       ctx.fillStyle = theme.inkPrimary;
       ctx.font = 'italic 21px Georgia, "Times New Roman", serif';
       ctx.textAlign = 'left';
-      ctx.fillText('untangle.', 58, 74);
+      ctx.fillText('untangle.', 54, 70);
 
       // Unspooling ink loop beside wordmark
       ctx.save();
-      ctx.translate(148, 60);
+      ctx.translate(144, 56);
       ctx.strokeStyle = theme.inkPrimary;
       ctx.lineWidth = 1.45;
       ctx.lineCap = 'round';
@@ -248,153 +270,179 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
       ctx.stroke();
       ctx.restore();
 
+      // Archival stamp pill on top right
+      const stampText = `${dateLabel}  ·  ${categoryLabel}`;
+      ctx.font = 'italic 12px Georgia, "Times New Roman", serif';
+      const stampWidth = ctx.measureText(stampText).width + 26;
+      const stampX = width - 54 - stampWidth;
+      ctx.fillStyle = theme.stampBg;
+      ctx.beginPath();
+      ctx.roundRect(stampX, 49, stampWidth, 26, 13);
+      ctx.fill();
+      ctx.strokeStyle = theme.cardBorder;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
       ctx.fillStyle = theme.inkMuted;
-      ctx.font = 'italic 13px Georgia, "Times New Roman", serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${dateLabel}  ·  ${categoryLabel}`, width - 58, 73);
+      ctx.textAlign = 'center';
+      ctx.fillText(stampText, stampX + stampWidth / 2, 66);
 
       // Divider rule under header
       ctx.strokeStyle = theme.innerBorder;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(58, 94);
-      ctx.lineTo(width - 58, 94);
+      ctx.moveTo(54, 90);
+      ctx.lineTo(width - 54, 90);
       ctx.stroke();
 
       // 4. Section 1: THE THOUGHT SET DOWN ON PAPER
-      let cursorY = 136;
+      let cursorY = 128;
       ctx.textAlign = 'center';
       ctx.fillStyle = theme.inkMuted;
-      ctx.font = '10.5px Georgia, "Times New Roman", serif';
-      ctx.letterSpacing = '2.5px';
+      ctx.font = '10px Georgia, "Times New Roman", serif';
+      ctx.letterSpacing = '2.6px';
       ctx.fillText('THE THOUGHT SET DOWN ON PAPER', width / 2, cursorY);
       ctx.letterSpacing = '0px';
 
-      cursorY += 32;
-      ctx.fillStyle = theme.inkSecondary;
-      ctx.font = 'italic 18px Georgia, "Times New Roman", serif';
+      cursorY += 30;
+      ctx.fillStyle = theme.inkPrimary;
+      ctx.font = 'italic 19px Georgia, "Times New Roman", serif';
       cursorY = drawWrappedText(
         ctx,
         `“${worryText}”`,
-        width / 2,
-        cursorY,
-        width - 150,
-        27
-      );
-
-      // 5. Center Unspooling Continuous Ink Line (Knot Loop -> Calm Horizon)
-      cursorY += 18;
-      ctx.save();
-      ctx.translate(width / 2 - 190, cursorY);
-      ctx.strokeStyle = theme.inkPrimary;
-      ctx.lineWidth = 1.65;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, 28);
-      ctx.bezierCurveTo(75, 28, 135, 16, 175, 8);
-      ctx.bezierCurveTo(192, 4, 198, -6, 184, -6);
-      ctx.bezierCurveTo(168, -6, 164, 24, 194, 30);
-      ctx.bezierCurveTo(240, 38, 310, 24, 380, 27);
-      ctx.stroke();
-      ctx.restore();
-
-      cursorY += 68;
-
-      // 6. Section 2: THE GENTLE REFRAME
-      ctx.fillStyle = theme.inkMuted;
-      ctx.font = '10.5px Georgia, "Times New Roman", serif';
-      ctx.letterSpacing = '2.5px';
-      ctx.fillText('A KINDER PERSPECTIVE', width / 2, cursorY);
-      ctx.letterSpacing = '0px';
-
-      cursorY += 32;
-      ctx.fillStyle = theme.inkPrimary;
-      ctx.font = '17.5px Georgia, "Times New Roman", serif';
-      cursorY = drawWrappedText(
-        ctx,
-        reframeText,
         width / 2,
         cursorY,
         width - 140,
         27
       );
 
-      // Small calm horizon wave divider
-      cursorY += 18;
+      // 5. Center Unspooling Continuous Ink Line (Knot Loop -> Calm Horizon)
+      cursorY += 14;
       ctx.save();
-      ctx.translate(width / 2 - 90, cursorY);
-      ctx.strokeStyle = theme.inkMuted;
-      ctx.lineWidth = 1.2;
+      ctx.translate(width / 2 - 190, cursorY);
+      ctx.strokeStyle = theme.inkPrimary;
+      ctx.lineWidth = 1.6;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.beginPath();
-      ctx.moveTo(0, 8);
-      ctx.bezierCurveTo(45, 2, 135, 14, 180, 8);
+      ctx.moveTo(0, 26);
+      ctx.bezierCurveTo(75, 26, 135, 15, 175, 7);
+      ctx.bezierCurveTo(192, 3, 198, -6, 184, -6);
+      ctx.bezierCurveTo(168, -6, 164, 22, 194, 28);
+      ctx.bezierCurveTo(240, 36, 310, 22, 380, 25);
       ctx.stroke();
       ctx.restore();
 
-      cursorY += 44;
+      cursorY += 62;
+
+      // 6. Section 2: A KINDER PERSPECTIVE
+      ctx.fillStyle = theme.inkMuted;
+      ctx.font = '10px Georgia, "Times New Roman", serif';
+      ctx.letterSpacing = '2.6px';
+      ctx.fillText('A KINDER PERSPECTIVE', width / 2, cursorY);
+      ctx.letterSpacing = '0px';
+
+      cursorY += 28;
+      ctx.fillStyle = theme.inkPrimary;
+      ctx.font = '16.5px Georgia, "Times New Roman", serif';
+      cursorY = drawWrappedText(
+        ctx,
+        reframeParts.quote,
+        width / 2,
+        cursorY,
+        width - 136,
+        25
+      );
+
+      if (reframeParts.sub) {
+        cursorY += 4;
+        ctx.fillStyle = theme.inkSecondary;
+        ctx.font = 'italic 14px Georgia, "Times New Roman", serif';
+        cursorY = drawWrappedText(
+          ctx,
+          reframeParts.sub,
+          width / 2,
+          cursorY,
+          width - 148,
+          22
+        );
+      }
+
+      // Small calm horizon wave divider
+      cursorY += 14;
+      ctx.save();
+      ctx.translate(width / 2 - 80, cursorY);
+      ctx.strokeStyle = theme.cardBorder;
+      ctx.lineWidth = 1.1;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 6);
+      ctx.bezierCurveTo(40, 1, 120, 11, 160, 6);
+      ctx.stroke();
+      ctx.restore();
+
+      cursorY += 32;
 
       // 7. Section 3: WHERE IT RESTS NOW (Resolution Box)
-      const boxX = 64;
-      const boxW = width - 128;
+      const boxX = 58;
+      const boxW = width - 116;
       const boxTop = cursorY;
+      const boxH = resolution.scheduleText ? 168 : 150;
 
       ctx.fillStyle = theme.pillBg;
       ctx.beginPath();
-      ctx.roundRect(boxX, boxTop, boxW, 172, 14);
+      ctx.roundRect(boxX, boxTop, boxW, boxH, 12);
       ctx.fill();
-      ctx.strokeStyle = theme.innerBorder;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = theme.cardBorder;
+      ctx.lineWidth = 0.9;
       ctx.stroke();
 
-      let innerY = boxTop + 30;
+      let innerY = boxTop + 28;
       ctx.fillStyle = theme.inkMuted;
-      ctx.font = 'italic 12px Georgia, "Times New Roman", serif';
-      ctx.fillText(resolution.badge, width / 2, innerY);
+      ctx.font = 'italic 11.5px Georgia, "Times New Roman", serif';
+      ctx.fillText(`✦  ${resolution.badge}`, width / 2, innerY);
 
-      innerY += 28;
+      innerY += 26;
       ctx.fillStyle = theme.inkPrimary;
-      ctx.font = '16.5px Georgia, "Times New Roman", serif';
+      ctx.font = '16px Georgia, "Times New Roman", serif';
       innerY = drawWrappedText(
         ctx,
         resolution.headline,
         width / 2,
         innerY,
-        boxW - 60,
-        24
+        boxW - 56,
+        23
       );
 
       innerY += 4;
       ctx.fillStyle = theme.inkSecondary;
-      ctx.font = 'italic 13.5px Georgia, "Times New Roman", serif';
+      ctx.font = 'italic 13px Georgia, "Times New Roman", serif';
       innerY = drawWrappedText(
         ctx,
         resolution.detail,
         width / 2,
         innerY,
-        boxW - 64,
-        20
+        boxW - 60,
+        19.5
       );
 
       if (resolution.scheduleText) {
         innerY += 6;
         ctx.fillStyle = theme.inkPrimary;
-        ctx.font = '12.5px Georgia, "Times New Roman", serif';
+        ctx.font = '12px Georgia, "Times New Roman", serif';
         ctx.fillText(`✦  ${resolution.scheduleText}`, width / 2, innerY);
       }
 
-      // 8. Bottom Signature Footer: crafted gently with [line-heart] by Tanya Singh
-      const footerY = height - 54;
+      // 8. Bottom Signature Footer: crafted gently with [line-heart] by untangle-thoughts
+      const footerY = height - 48;
       ctx.fillStyle = theme.inkMuted;
-      ctx.font = 'italic 13px Georgia, "Times New Roman", serif';
+      ctx.font = 'italic 12.5px Georgia, "Times New Roman", serif';
       ctx.textAlign = 'right';
-      ctx.fillText('crafted gently with', width / 2 - 28, footerY);
+      ctx.fillText('crafted gently with', width / 2 - 26, footerY);
 
       // Draw continuous line-heart in center
       ctx.save();
-      ctx.translate(width / 2 - 22, footerY - 15);
-      // Soft blush fill inside heart loop
+      ctx.translate(width / 2 - 22, footerY - 14);
       ctx.fillStyle = theme.accentFill;
       ctx.beginPath();
       ctx.moveTo(22, 16.5);
@@ -405,7 +453,6 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
       ctx.closePath();
       ctx.fill();
 
-      // Continuous stroke
       ctx.strokeStyle = theme.accentHeart;
       ctx.lineWidth = 1.4;
       ctx.lineCap = 'round';
@@ -422,9 +469,9 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
       ctx.restore();
 
       ctx.fillStyle = theme.inkPrimary;
-      ctx.font = '13px Georgia, "Times New Roman", serif';
+      ctx.font = 'italic 12.5px Georgia, "Times New Roman", serif';
       ctx.textAlign = 'left';
-      ctx.fillText('by Tanya Singh', width / 2 + 28, footerY);
+      ctx.fillText('by untangle-thoughts', width / 2 + 26, footerY);
 
       // Trigger PNG Download
       const dataUrl = canvas.toDataURL('image/png');
@@ -456,84 +503,52 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-950/35 backdrop-blur-xs select-none font-serif"
+          transition={{ duration: 0.22 }}
+          className="fixed inset-0 z-50 overflow-y-auto no-scrollbar bg-zinc-950/50 backdrop-blur-xs select-none font-serif"
         >
-          <div className="absolute inset-0" onClick={onClose} />
+          <div className="min-h-full w-full flex flex-col items-center justify-center p-3 sm:p-5 relative">
+            {/* Click-outside backdrop */}
+            <div className="fixed inset-0" onClick={onClose} />
 
-          <motion.div
-            initial={{ opacity: 0, y: 14, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-2xl bg-[#faf9f6] border border-zinc-200/90 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[92vh]"
-          >
-            {/* Modal Top Bar: Title + Paper Finish Picker + Close */}
-            <div className="px-6 py-4 border-b border-zinc-200/60 flex items-center justify-between gap-4 shrink-0 bg-[#faf9f6]">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-zinc-700" />
-                  <h3 className="text-[15.5px] font-serif italic text-zinc-900">
-                    reflection postcard preview.
-                  </h3>
-                </div>
-                <p className="text-[11.5px] font-serif text-zinc-500 mt-0.5">
-                  Preview your unspooled worry card before saving it as a keepsake image.
-                </p>
-              </div>
-
-              {/* Paper Tone Selector */}
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-zinc-200/50 p-1 rounded-full border border-zinc-200">
-                  {(Object.keys(PAPER_THEMES) as PaperThemeId[]).map((key) => {
-                    const t = PAPER_THEMES[key];
-                    const active = themeId === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setThemeId(key)}
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-serif italic transition-all cursor-pointer ${
-                          active
-                            ? 'bg-zinc-900 text-white shadow-xs'
-                            : 'text-zinc-600 hover:text-zinc-900'
-                        }`}
-                      >
-                        {t.label.toLowerCase()}
-                      </button>
-                    );
-                  })}
-                </div>
-
+            {/* Floating Postcard + Minimalist Controls Wrapper (No Modal Header!) */}
+            <motion.div
+              initial={{ opacity: 0, y: 12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+              className="relative z-10 w-full max-w-[520px] flex flex-col items-center gap-3"
+            >
+              {/* Subtle Close Button Above Card */}
+              <div className="w-full flex items-center justify-end px-1">
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="p-1 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"
-                  title="Close preview"
+                  className="w-8 h-8 rounded-full bg-[#faf9f6]/95 hover:bg-white text-zinc-600 hover:text-zinc-950 border border-zinc-300/80 shadow-md flex items-center justify-center transition-all cursor-pointer touch-manipulation"
+                  title="Close postcard"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
 
-            {/* Scrollable Preview Stage (Scrollbars Hidden) */}
-            <div className="flex-1 overflow-y-auto no-scrollbar p-6 sm:p-8 bg-zinc-200/35 flex items-center justify-center">
-              {/* THE LIVE POSTCARD PREVIEW CARD */}
+              {/* ========================================================
+                  THE ARTISAN LITERARY POSTCARD (100% Visible Centerpiece)
+              ======================================================== */}
               <div
                 style={{
                   backgroundColor: theme.bg,
                   borderColor: theme.cardBorder,
                   color: theme.inkPrimary,
                 }}
-                className="w-full max-w-[500px] rounded-xl border p-3 shadow-lg transition-colors duration-300 select-text"
+                className="w-full rounded-2xl border p-2.5 shadow-2xl transition-colors duration-300 select-text"
               >
                 <div
                   style={{ borderColor: theme.innerBorder }}
-                  className="border rounded-lg px-7 py-7 flex flex-col items-center text-center relative"
+                  className="border rounded-xl px-6 py-5 sm:px-7 sm:py-6 flex flex-col items-center text-center relative"
                 >
-                  {/* Card Header: Wordmark + Date/Category */}
+                  {/* Top Header: Wordmark + Archival Postmark Badge */}
                   <div
                     style={{ borderColor: theme.innerBorder }}
-                    className="w-full pb-3.5 mb-5 border-b flex items-center justify-between text-left"
+                    className="w-full pb-3 mb-4 border-b flex items-center justify-between text-left"
                   >
                     <div className="inline-flex items-center gap-2">
                       <span
@@ -543,8 +558,8 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
                         untangle.
                       </span>
                       <svg
-                        width="52"
-                        height="16"
+                        width="50"
+                        height="15"
                         viewBox="0 0 64 20"
                         fill="none"
                         className="overflow-visible"
@@ -559,104 +574,122 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
                     </div>
 
                     <span
-                      style={{ color: theme.inkMuted }}
-                      className="text-[11.5px] font-serif italic"
+                      style={{
+                        color: theme.inkMuted,
+                        backgroundColor: theme.stampBg,
+                        borderColor: theme.cardBorder,
+                      }}
+                      className="px-2.5 py-0.5 rounded-full border text-[10.5px] font-serif italic tracking-wide"
                     >
                       {dateLabel} · {categoryLabel}
                     </span>
                   </div>
 
-                  {/* 1. The Heavy Thought */}
+                  {/* Chapter I: The Thought Set Down on Paper */}
                   <span
                     style={{ color: theme.inkMuted }}
-                    className="text-[9.5px] uppercase tracking-[0.22em] font-serif"
+                    className="text-[9px] uppercase tracking-[0.24em] font-serif"
                   >
                     The thought set down on paper
                   </span>
                   <p
-                    style={{ color: theme.inkSecondary }}
-                    className="text-[15px] font-serif italic mt-2 leading-relaxed max-w-md"
+                    style={{ color: theme.inkPrimary }}
+                    className="text-[16px] font-serif italic mt-1.5 leading-snug max-w-md"
                   >
                     “{worryText}”
                   </p>
 
-                  {/* Continuous Unspooling Line SVG (Loop -> Smooth Horizon) */}
-                  <div className="my-4 w-full flex justify-center">
+                  {/* Continuous Unspooling Line SVG (Tight Knot -> Calm Horizon) */}
+                  <div className="my-3 w-full flex items-center justify-center gap-2">
+                    <span style={{ color: theme.inkMuted }} className="text-[8px] opacity-60">
+                      ✦
+                    </span>
                     <svg
-                      width="300"
-                      height="36"
-                      viewBox="0 0 380 42"
+                      width="270"
+                      height="30"
+                      viewBox="0 0 380 40"
                       fill="none"
                       className="overflow-visible"
                     >
                       <motion.path
-                        d="M 0 28 C 75 28, 135 16, 175 8 C 192 4, 198 -6, 184 -6 C 168 -6, 164 24, 194 30 C 240 38, 310 24, 380 27"
+                        d="M 0 26 C 75 26, 135 15, 175 7 C 192 3, 198 -6, 184 -6 C 168 -6, 164 22, 194 28 C 240 36, 310 22, 380 25"
                         stroke={theme.inkPrimary}
-                        strokeWidth="1.6"
+                        strokeWidth="1.55"
                         strokeLinecap="round"
                         initial={{ pathLength: 0 }}
                         animate={{ pathLength: 1 }}
-                        transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+                        transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
                       />
                     </svg>
+                    <span style={{ color: theme.inkMuted }} className="text-[8px] opacity-60">
+                      ✦
+                    </span>
                   </div>
 
-                  {/* 2. The Gentle Reframe */}
+                  {/* Chapter II: A Kinder Perspective */}
                   <span
                     style={{ color: theme.inkMuted }}
-                    className="text-[9.5px] uppercase tracking-[0.22em] font-serif"
+                    className="text-[9px] uppercase tracking-[0.24em] font-serif"
                   >
                     A kinder perspective
                   </span>
                   <p
                     style={{ color: theme.inkPrimary }}
-                    className="text-[14.5px] font-serif mt-2 leading-relaxed max-w-md"
+                    className="text-[14px] font-serif mt-1.5 leading-snug max-w-md"
                   >
-                    {reframeText}
+                    {reframeParts.quote}
                   </p>
+                  {reframeParts.sub && (
+                    <p
+                      style={{ color: theme.inkSecondary }}
+                      className="text-[12.5px] font-serif italic mt-1 leading-relaxed max-w-md"
+                    >
+                      {reframeParts.sub}
+                    </p>
+                  )}
 
-                  {/* Gentle Horizon Stroke */}
-                  <div className="my-4 flex justify-center">
-                    <svg width="140" height="14" viewBox="0 0 180 16" fill="none">
+                  {/* Gentle Horizon Wave Divider */}
+                  <div className="my-3 flex justify-center">
+                    <svg width="120" height="10" viewBox="0 0 160 12" fill="none">
                       <path
-                        d="M 0 8 C 45 2, 135 14, 180 8"
-                        stroke={theme.inkMuted}
+                        d="M 0 6 C 40 1, 120 11, 160 6"
+                        stroke={theme.cardBorder}
                         strokeWidth="1.15"
                         strokeLinecap="round"
                       />
                     </svg>
                   </div>
 
-                  {/* 3. Where It Rests Now (Resolution Box) */}
+                  {/* Chapter III: Where It Rests Now (Editorial Resolution Note) */}
                   <div
                     style={{
                       backgroundColor: theme.pillBg,
-                      borderColor: theme.innerBorder,
+                      borderColor: theme.cardBorder,
                     }}
-                    className="w-full rounded-xl border px-5 py-4 text-center"
+                    className="w-full rounded-xl border px-4 py-3 text-center"
                   >
                     <span
                       style={{ color: theme.inkMuted }}
-                      className="text-[11px] font-serif italic block"
+                      className="text-[10.5px] font-serif italic block"
                     >
-                      {resolution.badge}
+                      ✦ {resolution.badge}
                     </span>
                     <p
                       style={{ color: theme.inkPrimary }}
-                      className="text-[14px] font-serif mt-1.5 leading-snug"
+                      className="text-[13.5px] font-serif mt-1 leading-snug"
                     >
                       {resolution.headline}
                     </p>
                     <p
                       style={{ color: theme.inkSecondary }}
-                      className="text-[12px] font-serif italic mt-1 leading-relaxed"
+                      className="text-[11.5px] font-serif italic mt-1 leading-relaxed"
                     >
                       {resolution.detail}
                     </p>
                     {resolution.scheduleText && (
                       <div
                         style={{ color: theme.inkPrimary }}
-                        className="mt-2.5 inline-flex items-center gap-1.5 text-[11.5px] font-serif"
+                        className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-serif"
                       >
                         <CalendarIcon className="w-3 h-3 opacity-80" />
                         <span>{resolution.scheduleText}</span>
@@ -664,18 +697,21 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
                     )}
                   </div>
 
-                  {/* Postcard Footer Signature */}
-                  <div className="mt-6 pt-2 flex items-center justify-center gap-1.5 text-[11.5px] font-serif italic">
+                  {/* Postcard Footer Signature: crafted gently with [heart] by untangle-thoughts */}
+                  <div
+                    style={{ borderColor: theme.innerBorder }}
+                    className="w-full mt-4 pt-3 border-t flex items-center justify-center gap-1.5 text-[11.5px] font-serif italic"
+                  >
                     <span style={{ color: theme.inkMuted }}>crafted gently with</span>
                     <svg
-                      width="44"
-                      height="18"
+                      width="40"
+                      height="16"
                       viewBox="0 0 44 20"
                       fill="none"
                       className="overflow-visible"
                     >
                       <path
-                        d="M 22 16.5 C 14 12, 10.5 6.5, 14 3.2 C 17 0.5, 21.2 3, 22 7 C 22.8 3, 27 0.5, 30 3.2 C 33.5 6.5, 30 12, 22 16.5 Z"
+                        d="M 22 16.5 C 14 12, 10.5 6.5, 14 3.2 C 17 0.5, 21.2 3, 22 7 C 22.8, 3, 27 0.5, 30 3.2 C 33.5 6.5, 30 12, 22 16.5 Z"
                         fill={theme.accentFill}
                       />
                       <path
@@ -686,44 +722,45 @@ export const PostcardExportModal: React.FC<PostcardExportModalProps> = ({
                         strokeLinejoin="round"
                       />
                     </svg>
-                    <span style={{ color: theme.inkPrimary }} className="not-italic">
-                      by <span className="font-medium">Tanya Singh</span>
+                    <span style={{ color: theme.inkPrimary }}>
+                      by <span className="font-medium">untangle-thoughts</span>
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Modal Footer Actions */}
-            <div className="px-6 py-4 border-t border-zinc-200/60 bg-[#faf9f6] flex items-center justify-between gap-4 shrink-0">
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-[13px] font-serif italic text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer"
-              >
-                return to the line
-              </button>
+              {/* Floating Bottom Action Pill Bar */}
+              <div className="w-full flex items-center justify-between gap-3 px-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#faf9f6]/95 hover:bg-white text-zinc-700 hover:text-zinc-950 border border-zinc-300/80 text-[12.5px] font-serif italic shadow-md transition-all cursor-pointer"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>return to the line</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handleDownloadPng}
-                disabled={isExporting}
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-zinc-900 hover:bg-black text-white text-[13px] font-serif italic transition-all shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {exportedDone ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>postcard saved (PNG)</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{isExporting ? 'preparing postcard...' : 'download postcard (PNG)'}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </motion.div>
+                <button
+                  type="button"
+                  onClick={handleDownloadPng}
+                  disabled={isExporting}
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-zinc-900 hover:bg-black text-white text-[12.5px] font-serif italic shadow-md transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {exportedDone ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>postcard saved (PNG)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5" />
+                      <span>{isExporting ? 'preparing postcard...' : 'download postcard (PNG)'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
