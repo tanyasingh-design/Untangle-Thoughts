@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Trash2, ArrowRight } from 'lucide-react';
+import { X, Plus, Trash2, ArrowRight, Sparkles, CalendarCheck } from 'lucide-react';
 import { DiaryPage } from '../types/worryTree';
 
 interface PastEntriesModalProps {
@@ -11,6 +11,7 @@ interface PastEntriesModalProps {
   onSelectPage: (id: string) => void;
   onNewPage: () => void;
   onDeletePage?: (id: string) => void;
+  onPreviewExportPage?: (page: DiaryPage) => void;
 }
 
 // Alternating organic left-side ink wave paths inspired by Reference Image 2
@@ -30,6 +31,7 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
   onSelectPage,
   onNewPage,
   onDeletePage,
+  onPreviewExportPage,
 }) => {
   return (
     <AnimatePresence>
@@ -75,7 +77,7 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
             </div>
 
             {/* Flowing Ink Line Rows OR Animated Empty State */}
-            <div className="flex-1 overflow-y-auto py-8 space-y-6">
+            <div className="flex-1 overflow-y-auto no-scrollbar py-8 space-y-6">
               {pages.length === 0 ? (
                 /* Empty State with Animated Cursive Line Through About Creating a Worry */
                 <div className="py-6 flex items-center justify-between">
@@ -149,6 +151,7 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
               ) : (
                 pages.map((p, idx) => {
                   const isActive = p.id === activePageId;
+                  const hasCalendarEvent = Boolean(p.calendarEventCreated);
                   const displayQuote = p.rootWorry?.trim()
                     ? `“${p.rootWorry.trim()}”`
                     : `“${p.title || 'An unwritten thought'}”`;
@@ -196,22 +199,62 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
 
                       {/* Center Quote & Italic Subline (Nestled in the break of the line) */}
                       <div className="flex-1 px-4 text-center min-w-0">
-                        <p
-                          className={`text-[14px] font-serif leading-snug truncate transition-colors ${
-                            isActive
-                              ? 'text-zinc-950 font-medium'
-                              : 'text-zinc-700 group-hover:text-zinc-950'
-                          }`}
-                        >
-                          {displayQuote}
-                        </p>
+                        <div className="inline-flex items-center justify-center gap-1.5 max-w-full">
+                          <p
+                            className={`text-[14px] font-serif leading-snug truncate transition-colors ${
+                              isActive
+                                ? 'text-zinc-950 font-medium'
+                                : 'text-zinc-700 group-hover:text-zinc-950'
+                            }`}
+                          >
+                            {displayQuote}
+                          </p>
+                          {hasCalendarEvent && (
+                            <span
+                              title={
+                                p.calendarEventSummary
+                                  ? `Scheduled in Google Calendar: ${p.calendarEventSummary}`
+                                  : 'Scheduled in Google Calendar'
+                              }
+                              className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-700"
+                            >
+                              <CalendarCheck className="w-2.5 h-2.5" />
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[12px] font-serif italic text-zinc-500 mt-0.5 truncate">
                           {subline}
                         </p>
-                        <div className="flex items-center justify-center gap-2 mt-1 text-[10.5px] font-serif italic text-zinc-400">
+                        <div className="flex items-center justify-center gap-2 flex-wrap mt-1 text-[10.5px] font-serif italic text-zinc-400">
                           <span>{p.date}</span>
                           <span>·</span>
                           <span>{(p.category || 'general').toLowerCase()}</span>
+                          {hasCalendarEvent && (
+                            <>
+                              <span>·</span>
+                              {p.calendarEventLink ? (
+                                <a
+                                  href={p.calendarEventLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="Open scheduled event in Google Calendar"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-50/90 border border-emerald-200/70 text-emerald-800 hover:bg-emerald-100/80 transition-colors"
+                                >
+                                  <CalendarCheck className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                                  <span>on calendar</span>
+                                </a>
+                              ) : (
+                                <span
+                                  title="Scheduled on Google Calendar"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full bg-emerald-50/90 border border-emerald-200/70 text-emerald-800"
+                                >
+                                  <CalendarCheck className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                                  <span>on calendar</span>
+                                </span>
+                              )}
+                            </>
+                          )}
                           {isActive && (
                             <>
                               <span>·</span>
@@ -223,8 +266,20 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Right Tail Ink Segment + Always-Available Delete Button */}
-                      <div className="shrink-0 flex items-center gap-1.5 pr-3">
+                      {/* Right Tail Ink Segment + Postcard Preview & Delete Buttons */}
+                      <div className="shrink-0 flex items-center gap-1 pr-3">
+                        {onPreviewExportPage && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onPreviewExportPage(p);
+                            }}
+                            className="opacity-60 group-hover:opacity-100 p-1.5 text-zinc-500 hover:text-zinc-950 transition-all cursor-pointer"
+                            title="Preview & export postcard"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {onDeletePage && (
                           <button
                             onClick={(e) => {

@@ -1,5 +1,4 @@
-import express, { Request, Response } from 'express';
-import { createServer as createViteServer } from 'vite';
+import express, { type Request, type Response } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,7 +12,77 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json());
+app.disable('x-powered-by');
+
+// Website-Level Security Headers (CSP, Permissions-Policy, HSTS, Clickjacking & MIME Sniffing Protection)
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
+
+// In-Memory Per-IP Rate Limiter for /api/* Endpoints (60 requests / minute)
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+
+app.use('/api', (req, res, next) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = rateLimitStore.get(clientIp);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitStore.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    next();
+    return;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    res.status(429).json({ error: 'Too many requests. Please pause briefly and try again.' });
+    return;
+  }
+
+  entry.count += 1;
+  next();
+});
+
+app.use(express.json({ limit: '100kb' }));
+
+// Input Sanitization Middleware (strips dangerous script/iframe/object tags and caps string length)
+function sanitizeInput(value: any): any {
+  if (typeof value === 'string') {
+    return value
+      .replace(/<\s*script[^>]*>[\s\S]*?<\s*\/\s*script\s*>/gi, '')
+      .replace(/<\s*(iframe|object|embed|link|meta)[^>]*>/gi, '')
+      .replace(/javascript\s*:/gi, '')
+      .replace(/on\w+\s*=/gi, '')
+      .slice(0, 2000);
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map(sanitizeInput);
+  }
+  if (value && typeof value === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k !== '__proto__' && k !== 'constructor' && k !== 'prototype') {
+        cleaned[k] = sanitizeInput(v);
+      }
+    }
+    return cleaned;
+  }
+  return value;
+}
+
+app.use('/api', (req, _res, next) => {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeInput(req.body);
+  }
+  next();
+});
 
 // Initialize GoogleGenAI SDK with required telemetry header
 let aiClient: GoogleGenAI | null = null;
@@ -342,7 +411,6 @@ Your goals:
           ],
           config: {
             systemInstruction,
-            temperature: 0.6,
           }
         });
         return response.text;
@@ -808,11 +876,161 @@ User context:
 });
 
 
+// Endpoint 7: AI Contextual Worry Trio Suggestions (What? How? When?) tailored to the user's specific worry
+function buildContextualFallbackSuggestions(rootWorry: string, category: string = 'General') {
+  const text = (rootWorry || '').toLowerCase();
+  const cat = (category || 'General').toLowerCase();
+
+  if (text.includes('exam') || text.includes('test') || text.includes('study') || text.includes('class') || text.includes('grade')) {
+    return {
+      what: ['review 1 topic', 'practice 3 questions', 'summarize notes', 'ask a classmate'],
+      how: ['20-min timer', 'one page at a time', 'without multitasking'],
+      when: ['in 10 mins', 'after a short break', 'tonight at 7 pm'],
+    };
+  }
+  if (text.includes('interview') || text.includes('job') || text.includes('resume') || text.includes('presentation') || text.includes('meeting') || cat === 'work') {
+    return {
+      what: ['draft 3 bullet points', 'practice out loud', 'send 1 brief update', 'prepare key notes'],
+      how: ['calmly for 10 mins', 'rough draft first', 'one slide at a time'],
+      when: ['in 15 mins', 'tomorrow morning', 'before lunch'],
+    };
+  }
+  if (text.includes('money') || text.includes('bill') || text.includes('rent') || text.includes('budget') || text.includes('debt') || cat === 'finances') {
+    return {
+      what: ['check 1 balance', 'list upcoming bills', 'pause 1 expense', 'set a small transfer'],
+      how: ['with a cup of tea', 'just the facts', 'step by step'],
+      when: ['in 10 mins', 'this evening', 'saturday morning'],
+    };
+  }
+  if (text.includes('sleep') || text.includes('tired') || text.includes('pain') || text.includes('doctor') || text.includes('sick') || cat === 'health') {
+    return {
+      what: ['drink warm water', 'book appointment', 'stretch gently', 'rest eyes 10 mins'],
+      how: ['slowly & kindly', 'without screens', 'one breath at a time'],
+      when: ['right now', 'before bed tonight', 'tomorrow at 10 am'],
+    };
+  }
+  if (text.includes('friend') || text.includes('partner') || text.includes('family') || text.includes('talk') || text.includes('argument') || cat === 'relationships') {
+    return {
+      what: ['send a kind text', 'write down feelings', 'ask to talk', 'give gentle space'],
+      how: ['honestly & softly', 'without rushing', 'listening first'],
+      when: ['in an hour', 'tonight', 'this weekend'],
+    };
+  }
+
+  return {
+    what: ['write 1 small step', 'talk to someone', 'tidy 1 corner', 'prepare for 5 mins'],
+    how: ['step by step', 'calmly, no rush', 'ask for help'],
+    when: ['in 5 mins', 'tonight', 'tomorrow morning'],
+  };
+}
+
+app.post('/api/worry-trio-suggestions', async (req: Request, res: Response) => {
+  try {
+    const { rootWorry = '', category = 'General' } = req.body || {};
+    const cleanWorry = String(rootWorry).trim();
+    const cleanCat = String(category || 'General').trim();
+
+    const fallback = buildContextualFallbackSuggestions(cleanWorry, cleanCat);
+
+    if (!cleanWorry) {
+      res.json({ ...fallback, source: 'default' });
+      return;
+    }
+
+    const cacheKey = `trio:${cleanWorry.toLowerCase()}:${cleanCat.toLowerCase()}`;
+    const cached = getCached<{ what: string[]; how: string[]; when: string[] }>(cacheKey);
+    if (cached && Array.isArray(cached.what) && cached.what.length > 0) {
+      res.json({ ...cached, source: 'cache' });
+      return;
+    }
+
+    if (!aiClient) {
+      res.json({ ...fallback, source: 'heuristics' });
+      return;
+    }
+
+    const prompt = `You are a gentle, compassionate cognitive behavioral assistant helping a user take a tiny, realistic action on their specific worry.
+User's Worry: "${cleanWorry}"
+Life Area / Context: "${cleanCat}"
+
+Generate ultra-short, specific, lowercase suggestion chips directly tailored to this exact worry for three small note cards:
+1. "what": 4 concrete, tiny actions the user can gently do about "${cleanWorry}" (each MUST be 1 to 3 words max, e.g. "outline 3 points", "email professor", "check balance", "stretch 5 mins").
+2. "how": 3 gentle, realistic ways or attitudes to do that specific action (each MUST be 2 to 3 words max, e.g. "rough draft only", "with a timer", "step by step").
+3. "when": 3 realistic, gentle timing anchors suited to this worry (each MUST be 1 to 3 words max, e.g. "in 10 mins", "after dinner", "tomorrow morning").
+
+Keep all suggestions lowercase, warm, non-overwhelming, and directly relevant to "${cleanWorry}".`;
+
+    const { result, usedModel } = await executeWithQuotaProtection(
+      'gemini-3.8-flash',
+      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      async (modelName) => {
+        const response = await aiClient!.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                what: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: '4 short (1-3 words) actionable suggestions specific to the worry',
+                },
+                how: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: '3 short (2-3 words) gentle approach suggestions specific to the worry',
+                },
+                when: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: '3 short (1-3 words) realistic timing suggestions',
+                },
+              },
+              required: ['what', 'how', 'when'],
+            },
+          },
+        });
+        return JSON.parse(response.text || '{}');
+      }
+    );
+
+    if (
+      result &&
+      Array.isArray(result.what) &&
+      result.what.length > 0 &&
+      Array.isArray(result.how) &&
+      result.how.length > 0 &&
+      Array.isArray(result.when) &&
+      result.when.length > 0
+    ) {
+      const cleaned = {
+        what: result.what.slice(0, 4).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+        how: result.how.slice(0, 3).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+        when: result.when.slice(0, 3).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+      };
+      setCache(cacheKey, cleaned);
+      res.json({ ...cleaned, source: usedModel || 'gemini' });
+      return;
+    }
+
+    res.json({ ...fallback, source: 'fallback' });
+  } catch (error) {
+    const fallback = buildContextualFallbackSuggestions(
+      (req.body as any)?.rootWorry || '',
+      (req.body as any)?.category || 'General'
+    );
+    res.json({ ...fallback, source: 'fallback' });
+  }
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

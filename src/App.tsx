@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
+import {
   Plus,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
 import { DiaryPage, INITIAL_DIARY_PAGES } from './types/worryTree';
 import { WorryTreeCanvas } from './components/WorryTreeCanvas';
 import { PastEntriesModal } from './components/PastEntriesModal';
+import { PostcardExportModal } from './components/PostcardExportModal';
 import { PanicSomaticOverlay } from './components/overlays/PanicSomaticOverlay';
 import { ClinicalGuideModal } from './components/overlays/ClinicalGuideModal';
 
@@ -18,7 +19,11 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            (item) => item && typeof item === 'object' && typeof item.id === 'string'
+          );
+        }
       }
     } catch (e) {
       console.warn('Failed to load diary pages from local storage:', e);
@@ -33,6 +38,7 @@ export default function App() {
   const [showQuickCalm, setShowQuickCalm] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showPastEntriesModal, setShowPastEntriesModal] = useState(false);
+  const [exportPreviewPage, setExportPreviewPage] = useState<DiaryPage | null>(null);
 
   const activePage = pages.find((p) => p.id === activePageId) || pages[0] || null;
 
@@ -155,7 +161,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen w-screen bg-[#faf9f6] text-zinc-900 font-serif overflow-hidden selection:bg-zinc-200">
       {/* Editorial Ink-Line Navigation Bar (3-Zone Top Bar Contract) */}
-      <header className="h-14 px-8 bg-[#faf9f6]/95 backdrop-blur-xs border-b border-zinc-200/40 flex items-center justify-between gap-8 select-none z-20 shrink-0">
+      <header className="h-14 px-8 bg-[#faf9f6]/95 backdrop-blur-xs border-b border-zinc-200/40 flex items-center justify-between gap-6 select-none z-20 shrink-0">
         {/* Zone 1: Brand Wordmark with Unspooling Ink Loop */}
         <a
           href="#top"
@@ -188,7 +194,7 @@ export default function App() {
         </a>
 
         {/* Zone 2: Quiet Literary Navigation Links Connected by Hand-Drawn Ink Strokes */}
-        <nav className="flex items-center gap-5 text-[13.5px] font-serif italic text-zinc-500">
+        <nav className="flex items-center gap-4 text-[13.5px] font-serif italic text-zinc-500 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setShowPastEntriesModal(true)}
             className="group relative py-1 text-zinc-600 hover:text-zinc-950 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
@@ -197,7 +203,7 @@ export default function App() {
             <span className="absolute left-0 right-0 -bottom-0.5 h-[1px] bg-zinc-900 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-200" />
           </button>
 
-          <svg width="22" height="10" viewBox="0 0 22 10" fill="none" className="text-zinc-300 shrink-0" aria-hidden="true">
+          <svg width="20" height="10" viewBox="0 0 22 10" fill="none" className="text-zinc-300 shrink-0" aria-hidden="true">
             <path d="M 2 5 C 8 3, 14 7, 20 5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
           </svg>
 
@@ -209,7 +215,7 @@ export default function App() {
             <span className="absolute left-0 right-0 -bottom-0.5 h-[1px] bg-zinc-900 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-200" />
           </button>
 
-          <svg width="22" height="10" viewBox="0 0 22 10" fill="none" className="text-zinc-300 shrink-0" aria-hidden="true">
+          <svg width="20" height="10" viewBox="0 0 22 10" fill="none" className="text-zinc-300 shrink-0" aria-hidden="true">
             <path d="M 2 5 C 8 7, 14 3, 20 5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
           </svg>
 
@@ -223,33 +229,31 @@ export default function App() {
         </nav>
 
         {/* Zone 3: Single Primary Action with Hand-Drawn Ink Underline */}
-        <div className="flex items-center shrink-0">
-          <button
-            onClick={handleCreateNewPage}
-            className="group relative inline-flex flex-col items-end py-1 text-[13.5px] font-serif italic text-zinc-900 hover:text-black transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+        <button
+          onClick={handleCreateNewPage}
+          className="group relative inline-flex flex-col items-end py-1 text-[13.5px] font-serif italic text-zinc-900 hover:text-black transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5 stroke-[1.75] transition-transform duration-200 group-hover:rotate-90" />
+            <span>begin a new line</span>
+          </span>
+          <svg
+            width="108"
+            height="6"
+            viewBox="0 0 108 6"
+            fill="none"
+            className="mt-0.5 overflow-visible"
+            aria-hidden="true"
           >
-            <span className="inline-flex items-center gap-1.5">
-              <Plus className="w-3.5 h-3.5 stroke-[1.75] transition-transform duration-200 group-hover:rotate-90" />
-              <span>begin a new line</span>
-            </span>
-            <svg
-              width="108"
-              height="6"
-              viewBox="0 0 108 6"
-              fill="none"
-              className="mt-0.5 overflow-visible"
-              aria-hidden="true"
-            >
-              <path
-                d="M 2 3.5 C 32 1.5, 72 5, 106 2.5"
-                stroke="#18181b"
-                strokeWidth="1.25"
-                strokeLinecap="round"
-                className="opacity-70 group-hover:opacity-100 transition-opacity duration-200"
-              />
-            </svg>
-          </button>
-        </div>
+            <path
+              d="M 2 3.5 C 32 1.5, 72 5, 106 2.5"
+              stroke="#18181b"
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              className="opacity-70 group-hover:opacity-100 transition-opacity duration-200"
+            />
+          </svg>
+        </button>
       </header>
 
       {/* 100% Full-Width Horizontal Canvas or Animated Empty State */}
@@ -260,6 +264,7 @@ export default function App() {
             page={activePage}
             onUpdatePage={handleUpdateActivePage}
             onNewPage={handleCreateNewPage}
+            onOpenExportPreview={() => setExportPreviewPage(activePage)}
           />
         ) : (
           /* Full-Canvas Empty State: Animated Horizontal Cursive Line Through About Creating a Worry */
@@ -443,6 +448,17 @@ export default function App() {
         onSelectPage={setActivePageId}
         onNewPage={handleCreateNewPage}
         onDeletePage={handleDeletePage}
+        onPreviewExportPage={(p) => {
+          setShowPastEntriesModal(false);
+          setExportPreviewPage(p);
+        }}
+      />
+
+      {/* Postcard Preview & PNG Export Modal */}
+      <PostcardExportModal
+        isOpen={Boolean(exportPreviewPage)}
+        onClose={() => setExportPreviewPage(null)}
+        page={exportPreviewPage ? (pages.find((p) => p.id === exportPreviewPage.id) || exportPreviewPage) : null}
       />
 
       {/* Somatic Quick Calm Overlay */}

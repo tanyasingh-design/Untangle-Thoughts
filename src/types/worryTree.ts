@@ -95,6 +95,11 @@ export interface DiaryPage {
 
   // When check & Sign off
   knowWhenAct?: 'yes' | 'no' | null;
+  scheduledDate?: string; // YYYY-MM-DD
+  scheduledTime?: string; // HH:mm
+  calendarEventCreated?: boolean;
+  calendarEventLink?: string;
+  calendarEventSummary?: string;
   signOffWorry?: {
     date: string;
     name: string;
@@ -223,6 +228,10 @@ export const INITIAL_DIARY_PAGES: DiaryPage[] = [
     },
     canActNow: 'no',
     knowWhenAct: 'yes',
+    scheduledDate: '2026-11-04',
+    scheduledTime: '10:00',
+    calendarEventCreated: true,
+    calendarEventSummary: 'Gentle Step: Rehearse slide 1 out loud',
     signOffWorry: {
       date: "Tomorrow at 10:00 AM",
       name: "Alex"
