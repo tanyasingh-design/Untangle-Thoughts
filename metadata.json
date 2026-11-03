@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Decenter — Metacognitive Worry Framing \u0026 Canvas",
+  "description": "Desktop-first metacognitive anxiety and problem-framing assistant featuring dynamic canvas mind mapping, concrete situational unpacking, defusion reframing, and values-based implementation intentions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
