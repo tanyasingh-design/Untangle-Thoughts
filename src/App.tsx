@@ -12,6 +12,16 @@ import { PanicSomaticOverlay } from './components/overlays/PanicSomaticOverlay';
 import { ClinicalGuideModal } from './components/overlays/ClinicalGuideModal';
 
 const STORAGE_KEY = 'decenter_worry_diary_pages_v6';
+const LEGACY_SAMPLE_PAGE_IDS = new Set(['page-designer', 'page-milestone', 'page-rent']);
+
+function createFreshBlankPage(): DiaryPage {
+  const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return {
+    ...INITIAL_DIARY_PAGES[0],
+    id: `page-${Date.now()}`,
+    date: dateStr,
+  };
+}
 
 export default function App() {
   const [pages, setPages] = useState<DiaryPage[]>(() => {
@@ -20,15 +30,22 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter(
-            (item) => item && typeof item === 'object' && typeof item.id === 'string'
+          const userPages = parsed.filter(
+            (item) =>
+              item &&
+              typeof item === 'object' &&
+              typeof item.id === 'string' &&
+              !LEGACY_SAMPLE_PAGE_IDS.has(item.id)
           );
+          if (userPages.length > 0) {
+            return userPages;
+          }
         }
       }
     } catch (e) {
       console.warn('Failed to load diary pages from local storage:', e);
     }
-    return INITIAL_DIARY_PAGES;
+    return [createFreshBlankPage()];
   });
 
   const [activePageId, setActivePageId] = useState<string>(() => {

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  RotateCcw,
   ArrowRight,
   Check,
   Calendar as CalendarIcon,
@@ -9,15 +8,10 @@ import {
   Sparkles,
   ExternalLink,
   X,
-  ShieldCheck,
   Download,
 } from 'lucide-react';
 import { DiaryPage } from '../types/worryTree';
 import {
-  initAuth,
-  googleSignIn,
-  getAccessToken,
-  createGoogleCalendarEvent,
   buildGoogleCalendarTemplateUrl,
   downloadIcsCalendarFile,
 } from '../utils/googleCalendarAuth';
@@ -383,12 +377,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
   const stepFinalScheduleRef = useRef<HTMLDivElement>(null);
   const stepFinalNoBandwidthRef = useRef<HTMLDivElement>(null);
 
-  // Google Calendar OAuth & Confirmation Modal State
-  const [needsAuth, setNeedsAuth] = useState<boolean>(true);
-  const [isSigningInGoogle, setIsSigningInGoogle] = useState<boolean>(false);
+  // Google Calendar Confirmation Modal State
   const [showCalendarConfirmModal, setShowCalendarConfirmModal] = useState<boolean>(false);
-  const [isCreatingCalendarEvent, setIsCreatingCalendarEvent] = useState<boolean>(false);
-  const [calendarError, setCalendarError] = useState<string | null>(null);
   const [customEventTitle, setCustomEventTitle] = useState<string>('');
 
   // Mobile touch & drag-and-drop / node-editing state
@@ -402,14 +392,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     scrollTop: number;
   }>({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
   const springDrag = getSpringDragProps(isEditingNode);
-
-  useEffect(() => {
-    const unsubscribe = initAuth(
-      () => setNeedsAuth(false),
-      () => setNeedsAuth(true)
-    );
-    return () => unsubscribe();
-  }, []);
 
   // Progression stages
   const [unlocked, setUnlocked] = useState<{
@@ -1627,9 +1609,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     ]
   );
 
-  // Open confirmation modal immediately (works with or without OAuth sign-in)
+  // Open confirmation modal immediately (no OAuth sign-in needed)
   const handlePrepareCalendarEvent = () => {
-    setCalendarError(null);
     const defaultSummary = page.actionTrio?.what?.trim()
       ? `Gentle Step: ${page.actionTrio.what.trim()}`
       : `Untangle Reflection: ${page.rootWorry?.trim() || 'Scheduled Step'}`;
@@ -1639,49 +1620,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     setShowCalendarConfirmModal(true);
   };
 
-  // Google Sign-In handler (gracefully handles testing-mode popup close without scary raw errors)
-  const handleGoogleLogin = async (openModalAfter = false) => {
-    setCalendarError(null);
-    setIsSigningInGoogle(true);
-    const defaultSummary = page.actionTrio?.what?.trim()
-      ? `Gentle Step: ${page.actionTrio.what.trim()}`
-      : `Untangle Reflection: ${page.rootWorry?.trim() || 'Scheduled Step'}`;
-    if (!customEventTitle.trim()) {
-      setCustomEventTitle(defaultSummary);
-    }
-
-    try {
-      const result = await googleSignIn();
-      if (result?.accessToken) {
-        setNeedsAuth(false);
-        if (openModalAfter) {
-          setShowCalendarConfirmModal(true);
-        }
-      }
-    } catch (err: unknown) {
-      const code = err instanceof Error ? err.message : '';
-      // If user closed the "Google hasn't verified this app" popup or popup was blocked,
-      // open the confirmation modal smoothly so they can use the Safe Instant Google Calendar link!
-      setShowCalendarConfirmModal(true);
-      if (code === 'POPUP_CLOSED') {
-        setCalendarError(
-          'Sign-in popup was closed — you can still mark this date in Google Calendar below using the Safe Instant Link (no sign-in needed), or click "Continue" on Google’s testing screen.'
-        );
-      } else if (code === 'POPUP_BLOCKED') {
-        setCalendarError(
-          'Your browser blocked the sign-in popup — use the Safe Instant Google Calendar button below to add your event directly.'
-        );
-      } else {
-        setCalendarError(
-          'Direct OAuth sync was skipped — use the Safe Instant Google Calendar button below to save your event right away.'
-        );
-      }
-    } finally {
-      setIsSigningInGoogle(false);
-    }
-  };
-
-  // Mark as scheduled via Safe Instant Google Calendar Template Link (Zero OAuth Warning)
+  // Mark as scheduled via Direct Google Calendar Template Link (Zero OAuth)
   const handleConfirmInstantCalendarLink = () => {
     const payload = buildCurrentCalendarPayload();
     const templateUrl = buildGoogleCalendarTemplateUrl(payload);
@@ -1710,46 +1649,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
       calendarEventSummary: payload.summary,
     }));
     setShowCalendarConfirmModal(false);
-  };
-
-  // Execute Direct 1-Click Google Calendar API creation after explicit confirmation
-  const handleConfirmAddCalendarEvent = async () => {
-    setCalendarError(null);
-    setIsCreatingCalendarEvent(true);
-    try {
-      const token = await getAccessToken();
-      if (!token) {
-        setNeedsAuth(true);
-        await handleGoogleLogin(false);
-      }
-
-      const payload = buildCurrentCalendarPayload();
-      const created = await createGoogleCalendarEvent(payload);
-
-      onUpdatePage((prev) => ({
-        ...prev,
-        scheduledDate: payload.date,
-        scheduledTime: payload.time,
-        calendarEventCreated: true,
-        calendarEventLink: created.htmlLink || buildGoogleCalendarTemplateUrl(payload),
-        calendarEventSummary: payload.summary,
-      }));
-      setShowCalendarConfirmModal(false);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '';
-      if (message === 'NEEDS_AUTH' || message === 'POPUP_CLOSED') {
-        setNeedsAuth(true);
-        setCalendarError(
-          'To use 1-click API sync, sign in with Google and click "Continue" on the testing screen — or click "Open & save in Google Calendar" above with zero sign-in.'
-        );
-      } else {
-        setCalendarError(
-          'Could not sync via API right now — click "Open & save in Google Calendar" above to save it directly.'
-        );
-      }
-    } finally {
-      setIsCreatingCalendarEvent(false);
-    }
   };
 
   const canActDecision = page.canActOnWorry || page.canAct;
@@ -1963,20 +1862,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
 
               <div
                 onPointerDown={(e) => e.stopPropagation()}
-                className="mt-3 flex items-center justify-center gap-3"
+                className="mt-3 flex items-center justify-center"
               >
-                <button
-                  type="button"
-                  onClick={handleShuffleReframe}
-                  className="inline-flex items-center gap-1 py-1 px-1.5 text-[12px] sm:text-[11px] font-serif italic text-zinc-400 hover:text-zinc-800 transition-colors cursor-pointer touch-manipulation"
-                  title="Another gentle thought"
-                >
-                  <RotateCcw className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
-                  <span>another thought</span>
-                </button>
-
-                <span className="text-zinc-300">·</span>
-
                 <button
                   type="button"
                   onClick={handleReframeContinue}
@@ -2983,7 +2870,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                           </div>
                         ) : (
                           <div className="w-full flex flex-col items-center gap-2">
-                            {/* Primary Always-Working Mark in Google Calendar Button */}
                             <button
                               type="button"
                               onClick={handlePrepareCalendarEvent}
@@ -2992,60 +2878,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                               <CalendarIcon className="w-3.5 h-3.5" />
                               <span>mark in Google Calendar</span>
                             </button>
-
-                            {/* Optional 1-Click OAuth Connect or Connected Badge */}
-                            {needsAuth ? (
-                              <div className="w-full flex flex-col items-center gap-1 pt-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleGoogleLogin(true)}
-                                  disabled={isSigningInGoogle}
-                                  className="gsi-material-button scale-90 origin-center"
-                                >
-                                  <div className="gsi-material-button-state"></div>
-                                  <div className="gsi-material-button-content-wrapper">
-                                    <div className="gsi-material-button-icon">
-                                      <svg
-                                        version="1.1"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        viewBox="0 0 48 48"
-                                        style={{ display: 'block' }}
-                                      >
-                                        <path
-                                          fill="#EA4335"
-                                          d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                                        ></path>
-                                        <path
-                                          fill="#4285F4"
-                                          d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                                        ></path>
-                                        <path
-                                          fill="#FBBC05"
-                                          d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                                        ></path>
-                                        <path
-                                          fill="#34A853"
-                                          d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                                        ></path>
-                                        <path fill="none" d="M0 0h48v48H0z"></path>
-                                      </svg>
-                                    </div>
-                                    <span className="gsi-material-button-contents">
-                                      {isSigningInGoogle ? 'Connecting...' : 'Sign in with Google'}
-                                    </span>
-                                    <span style={{ display: 'none' }}>Sign in with Google</span>
-                                  </div>
-                                </button>
-                                <span className="text-[10px] font-serif italic text-zinc-400 text-center">
-                                  optional: connect for 1-click API sync (or use instant mark above)
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10.5px] font-serif italic text-emerald-700">
-                                <ShieldCheck className="w-3 h-3" />
-                                <span>Google Calendar 1-click API connected</span>
-                              </span>
-                            )}
                           </div>
                         )}
                       </div>
@@ -3198,9 +3030,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
       </div>
 
       {/* ========================================================
-          EXPLICIT USER CONFIRMATION MODAL FOR GOOGLE CALENDAR
-          Supports both Safe Instant Google Calendar Link (Zero OAuth Warning)
-          AND 1-Click Direct API Sync
+          GOOGLE CALENDAR CONFIRMATION MODAL
+          Uses Direct Pre-Filled Google Calendar Link + .ics Download
       ======================================================== */}
       <AnimatePresence>
         {showCalendarConfirmModal && (
@@ -3212,7 +3043,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
           >
             <div
               className="absolute inset-0"
-              onClick={() => !isCreatingCalendarEvent && setShowCalendarConfirmModal(false)}
+              onClick={() => setShowCalendarConfirmModal(false)}
             />
 
             <motion.div
@@ -3227,13 +3058,12 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                     confirm Google Calendar event.
                   </h4>
                   <p className="text-[11.5px] font-serif text-zinc-500 mt-0.5">
-                    Review your gentle step below and choose how you would like to place it on your calendar.
+                    Review your gentle step below and save it directly to your calendar.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowCalendarConfirmModal(false)}
-                  disabled={isCreatingCalendarEvent}
                   className="p-1 text-zinc-400 hover:text-zinc-900 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
@@ -3270,25 +3100,10 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                   )}
                 </div>
 
-                {calendarError && (
-                  <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-[11.5px] font-serif text-amber-900 leading-relaxed">
-                    {calendarError}
-                  </div>
-                )}
-
-                {/* Option 1: Safe Instant Google Calendar Link (Zero OAuth Warning) */}
+                {/* Direct Google Calendar Template Link + .ics Download */}
                 <div className="p-3.5 rounded-xl bg-white border border-zinc-200/90 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-[11.5px] font-serif italic text-zinc-800">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Safe Instant Calendar Mark (Recommended)</span>
-                    </span>
-                    <span className="text-[10px] font-serif italic text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                      no sign-in warning
-                    </span>
-                  </div>
                   <p className="text-[11px] font-serif text-zinc-500 leading-relaxed">
-                    Opens Google Calendar’s official event page pre-filled with your exact date, time, and notes, and marks this step complete right away.
+                    Opens Google Calendar’s event page pre-filled with your exact date, time, and notes, and marks this step complete right away.
                   </p>
                   <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                     <a
@@ -3313,84 +3128,12 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                     </button>
                   </div>
                 </div>
-
-                {/* Option 2: Direct 1-Click API Sync via OAuth */}
-                <div className="p-3.5 rounded-xl bg-white/70 border border-zinc-200/70 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11.5px] font-serif italic text-zinc-700">
-                      Direct 1-Click API Sync (Developer Testing Mode)
-                    </span>
-                  </div>
-
-                  {!needsAuth ? (
-                    <button
-                      type="button"
-                      onClick={handleConfirmAddCalendarEvent}
-                      disabled={isCreatingCalendarEvent}
-                      className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full bg-emerald-900 hover:bg-emerald-950 text-white text-[12px] font-serif italic transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>
-                        {isCreatingCalendarEvent
-                          ? 'adding directly to primary calendar...'
-                          : 'confirm & 1-click sync to primary calendar'}
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="flex flex-col items-start gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleGoogleLogin(false)}
-                        disabled={isSigningInGoogle}
-                        className="gsi-material-button"
-                      >
-                        <div className="gsi-material-button-state"></div>
-                        <div className="gsi-material-button-content-wrapper">
-                          <div className="gsi-material-button-icon">
-                            <svg
-                              version="1.1"
-                              xmlns="http://www.w3.org/2000/svg"
-                              viewBox="0 0 48 48"
-                              style={{ display: 'block' }}
-                            >
-                              <path
-                                fill="#EA4335"
-                                d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                              ></path>
-                              <path
-                                fill="#4285F4"
-                                d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                              ></path>
-                              <path
-                                fill="#FBBC05"
-                                d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                              ></path>
-                              <path
-                                fill="#34A853"
-                                d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                              ></path>
-                              <path fill="none" d="M0 0h48v48H0z"></path>
-                            </svg>
-                          </div>
-                          <span className="gsi-material-button-contents">
-                            {isSigningInGoogle ? 'Connecting...' : 'Sign in with Google'}
-                          </span>
-                          <span style={{ display: 'none' }}>Sign in with Google</span>
-                        </div>
-                      </button>
-                      <p className="text-[10.5px] font-serif italic text-zinc-500 leading-relaxed">
-                        Note: Because <span className="text-zinc-800 not-italic">Tanya Singh’s Apps</span> is in personal testing mode, Google shows a “Google hasn’t verified this app” screen. Click <span className="text-zinc-800 underline">Continue</span> (bottom-left) to authorize, or use the Safe Instant Calendar button above.
-                      </p>
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="mt-4 pt-3 border-t border-zinc-200/70 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setShowCalendarConfirmModal(false)}
-                  disabled={isCreatingCalendarEvent}
                   className="px-3.5 py-1 text-[12px] font-serif italic text-zinc-500 hover:text-zinc-900 cursor-pointer"
                 >
                   close
