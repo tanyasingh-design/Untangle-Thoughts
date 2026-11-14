@@ -84,24 +84,25 @@ app.use('/api', (req, _res, next) => {
   next();
 });
 
-// Initialize GoogleGenAI SDK with required telemetry header
+// Initialize GoogleGenAI SDK with required telemetry header (re-checks env key dynamically)
 let aiClient: GoogleGenAI | null = null;
+let lastApiKey: string | undefined = undefined;
 function getAiClient(): GoogleGenAI | null {
-  if (aiClient) return aiClient;
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (apiKey) {
-    try {
-      aiClient = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
+  if (!apiKey) return null;
+  if (aiClient && lastApiKey === apiKey) return aiClient;
+  try {
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
         },
-      });
-    } catch (err) {
-      console.error('Failed to initialize GoogleGenAI client:', err);
-    }
+      },
+    });
+    lastApiKey = apiKey;
+  } catch (err) {
+    console.error('Failed to initialize GoogleGenAI client:', err);
   }
   return aiClient;
 }
@@ -139,10 +140,7 @@ async function executeWithQuotaProtection<T>(
   if (!client) return { result: null };
 
   const defaultFallbacks = [
-    'gemini-3-flash-preview',
-    'gemini-flash-latest',
-    'gemini-2.5-flash',
-    'gemini-3.8-flash',
+    'gemini-4-hydrogen',
     'gemini-3.1-flash-lite',
   ];
   const candidates = [preferredModel, ...alternateModels, ...defaultFallbacks].filter(
@@ -246,7 +244,7 @@ function localAnalysis(rawText: string, context: string = 'General') {
     defusionReframings: [
       {
         type: 'THOUGHT_OBSERVATION',
-        framedThought: `I notice my mind is generating the thought that "${rawText.trim()}"`,
+        framedThought: `You notice your mind is generating the thought that "${rawText.trim()}"`,
         metaphorPrompt: 'Observe this sentence as text appearing across a billboard, separate from who is reading it.'
       },
       {
@@ -263,7 +261,7 @@ function localAnalysis(rawText: string, context: string = 'General') {
   };
 }
 
-// Endpoint 1: Deconstruct and unpack worry using Gemini 3.8 Flash
+// Endpoint 1: Deconstruct and unpack worry using Gemini 4 Hydrogen
 const handleUnpack = async (req: Request, res: Response) => {
   try {
     const { raw_worry_text, context = 'General' } = req.body as UnpackRequest;
@@ -295,8 +293,8 @@ Perform:
 7. Provide 3 cognitive defusion reframings (THOUGHT_OBSERVATION, PASSENGERS_ON_BUS, LEAVES_ON_STREAM).`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -381,7 +379,7 @@ app.post('/api/unpack-worry', handleUnpack);
 // Endpoint 2: Conversational AI Metacognitive Guide
 app.post('/api/metacognitive/chat', async (req: Request, res: Response) => {
   try {
-    const { messages, currentStep, currentState } = req.body;
+    const { messages, currentStep } = req.body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: 'messages array is required' });
@@ -413,8 +411,8 @@ Your goals:
 - Keep responses concise, compassionate, grounded, and non-prescriptive.`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -482,8 +480,8 @@ Generate 3 tiny, ultra-concrete 2-5 minute micro-actions that the user can do RI
 For each action, include a clear IF-THEN implementation intention rule.`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -563,8 +561,8 @@ Generate a clear 3-tier rational conclusion:
 3. Low Priority / Let Go (things they cannot control and must let go of).`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -626,19 +624,19 @@ app.post('/api/positive-reframe', async (req: Request, res: Response) => {
     const cleanSit = (situation || '').trim();
     const cleanContext = (context || 'Work').trim();
 
-    // Fallback generator directly synthesizing the prior 3 nodes in simple human terms
+    // Fallback generator directly synthesizing the prior 3 nodes in second person
     const generateSimpleDefaults = () => {
       return [
         cleanSit 
-          ? `Am I truly ${cleanWorry || 'wrong'}, or am I just comparing ${cleanSit} to an impossible standard?`
-          : `Am I ${cleanWorry || 'good enough'}, or do I need to become better before I can feel confident in ${cleanContext.toLowerCase()}?`,
-        `Am I actually ${cleanWorry || 'failing'}, or can I handle this one realistic step at a time?`,
-        `Is this situation truly about ${cleanWorry || 'not being good enough'}, or is my mind overthinking ${cleanSit || cleanContext.toLowerCase()}?`
+          ? `Are you truly ${cleanWorry || 'falling short'}, or are you just comparing ${cleanSit} to an impossible standard?`
+          : `Are you already good enough, or is your mind telling you to be perfect before you can feel calm in ${cleanContext.toLowerCase()}?`,
+        `Are you actually ${cleanWorry || 'failing'}, or can you handle this one realistic step at a time?`,
+        `Is this situation truly proof of ${cleanWorry || 'falling short'}, or is your mind overthinking ${cleanSit || cleanContext.toLowerCase()}?`
       ];
     };
 
     const defaultReframes = generateSimpleDefaults();
-    const cacheKey = `reframe:${cleanWorry.toLowerCase()}:${cleanSit.toLowerCase()}:${cleanContext.toLowerCase()}`;
+    const cacheKey = `reframe:v2:${cleanWorry.toLowerCase()}:${cleanSit.toLowerCase()}:${cleanContext.toLowerCase()}`;
     const cached = getCached<string[]>(cacheKey);
     if (cached && cached.length > 0) {
       res.json({ reframes: cached, source: 'cache' });
@@ -650,7 +648,7 @@ app.post('/api/positive-reframe', async (req: Request, res: Response) => {
       return;
     }
 
-    const prompt = `You are a cognitive restructuring and decision worksheet guide based on the "Make a Decision: Fear of Not Being Good Enough" worksheet dilemma model.
+    const prompt = `You are a cognitive restructuring and decision worksheet guide.
 
 User's prior 3 nodes:
 1. Root Worry: "${rootWorry}"
@@ -658,23 +656,22 @@ User's prior 3 nodes:
 3. Situation / Event: "${situation || 'General'}"
 
 YOUR TASK:
-Synthesize all 3 prior nodes into exactly 3 simple, human, one-liner dilemma inquiry questions.
+Synthesize all 3 prior nodes into exactly 3 simple, human, SECOND-PERSON ("you" / "your") one-liner dilemma inquiry questions.
 
 STRICT REQUIREMENTS:
 1. LENGTH: Must be a single short sentence (under 16 words max).
-2. TONE: Simple, everyday conversational English. Absolutely NO academic, clinical, or corporate jargon (NEVER use "evidence", "meaningful initiative", "capabilities", "paradigms", "constructive inquiry").
-3. PATTERN: Frame as a clean, honest one-liner dilemma directly comparing the fear against reality, exactly like the classic worksheet example:
-   "Am I good enough, or do I need to become better before I can feel confident in myself?"
+2. SECOND PERSON ONLY: Address the user as "you" / "your" (NEVER use first-person "I" / "my").
+3. TONE: Simple, everyday conversational English.
+4. PATTERN: Frame as a clean, honest second-person dilemma directly comparing the fear against reality:
+   "Are you truly unprepared for this, or is your mind just rehearsing worst-case scenarios?"
    or
-   "Am I actually doing wrong, or am I just comparing ${cleanSit || 'this'} to someone else's highlight reel?"
-   or
-   "Is ${cleanSit || 'this'} really proof that ${cleanWorry || 'I am failing'}, or can I take one calm step forward in ${cleanContext}?"
+   "Do you have to solve all of ${cleanSit || 'this'} tonight, or can you take one calm step in ${cleanContext}?"
 
-Return JSON with a "reframes" array containing 3 short, punchy string questions.`;
+Return JSON with a "reframes" array containing 3 short, punchy second-person string questions.`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -706,15 +703,14 @@ Return JSON with a "reframes" array containing 3 short, punchy string questions.
       return;
     }
 
-    // High quality clinical heuristics fallback seamlessly
     setCache(cacheKey, defaultReframes);
     res.json({ reframes: defaultReframes, source: 'clinical-heuristics' });
   } catch (error) {
     res.json({
       reframes: [
-        "Am I good enough, or do I need to become better before I can feel confident in myself?",
-        "Am I actually unprepared, or is my mind just overthinking this moment?",
-        "Can I take one calm, realistic step forward right now?"
+        "Are you already capable of handling this, or is your mind demanding perfection first?",
+        "Are you truly unprepared, or is your mind just overthinking this moment?",
+        "Can you take one calm, realistic step forward right now?"
       ],
       source: 'fallback'
     });
@@ -726,7 +722,6 @@ app.post('/api/generate-node-question', async (req: Request, res: Response) => {
   try {
     const { stepId, rootWorry, category, situationEvent, mindStory, pathway, previousAnswers } = req.body;
 
-    // Fallback dictionary for instant responsive chips
     const localDefaults: Record<string, { question: string; chips: string[]; helper: string }> = {
       'situation': {
         question: 'What happened?',
@@ -738,7 +733,6 @@ app.post('/api/generate-node-question', async (req: Request, res: Response) => {
         chips: ['I might fail', 'Everyone will judge', 'I will freeze', 'I lose everything'],
         helper: 'What scary thought is mind making?'
       },
-      // Non-Actionable Pathway
       'influence': {
         question: 'What to influence?',
         chips: ['My own breathing', 'How I respond', 'My attitude', 'My rest tonight'],
@@ -754,7 +748,6 @@ app.post('/api/generate-node-question', async (req: Request, res: Response) => {
         chips: ['Tomorrow morning', 'Friday at 4 PM', 'After next standup', 'Next Monday'],
         helper: 'Set a worry parking window'
       },
-      // Action Plan Pathway
       'changeable': {
         question: 'What to change?',
         chips: ['My draft notes', 'My tone of voice', 'The project schedule', 'My preparation'],
@@ -775,7 +768,6 @@ app.post('/api/generate-node-question', async (req: Request, res: Response) => {
         chips: ['Open notebook', 'Write 1 sentence', 'Set 5-min timer', 'Send single message'],
         helper: 'Under 2 minutes effort'
       },
-      // Make a Decision Pathway
       'decision_facing': {
         question: 'What decision?',
         chips: ['Push forward or wait', 'Ask for help or solo', 'Decline or accept', 'Re-do or submit as-is'],
@@ -844,9 +836,9 @@ User context:
 - Pathway: "${pathway || ''}"
 - Previous answers: ${JSON.stringify(previousAnswers || {})}`;
 
-    const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3.8-flash',
-      ['gemini-flash-latest', 'gemini-3.1-flash-lite'],
+    const { result } = await executeWithQuotaProtection(
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await aiClient!.models.generateContent({
           model: modelName,
@@ -891,7 +883,7 @@ User context:
 });
 
 
-// Endpoint 7: AI Contextual Worry Trio Suggestions (What? How? When?) + AI Positive Reaffirmations + AI Auto-Detected Context
+// Endpoint 7: AI Contextual Worry Trio Suggestions (What? How? When?) + AI Second-Person Perspectives + AI Auto-Detected Context
 interface ReaffirmationItem {
   quote: string;
   sub: string;
@@ -938,7 +930,6 @@ function detectLocalWorryCategory(rootWorry: string, currentCat: string = 'Gener
     'Personal Growth': 0,
   };
 
-  // High-signal phrase boosts
   if (/weight\s*(gain|loss)|gaining\s*weight|losing\s*weight|body\s*image|out\s*of\s*shape|blood\s*pressure|hair\s*loss|back\s*pain|chest\s*pain|mental\s*health|panic\s*attack/i.test(text)) {
     scores.Health += 4;
   }
@@ -948,14 +939,13 @@ function detectLocalWorryCategory(rootWorry: string, currentCat: string = 'Gener
   if (/lifestyle|status|social\s+status|good\s+life|society|expectations|pressure\s+to|peer\s+pressure|comparing\s+myself|keep\s+up\s+with|what\s+people\s+think|reputation|prestig|self[- ]worth|indecis|overthink|procrastinat|falling\s+behind/i.test(text)) {
     scores['Personal Growth'] += 4;
   }
-  if (/can'?t\s+afford|cost\s+of\s+living|credit\s+card|bank\s+account|student\s+loan|pay\s+rent|pay\s+bills/i.test(text)) {
+  if (/can'?t\s+afford|cost\s+of\s+living|credit\s+card|bank\s+account|student\s+loan|pay\s+rent|pay\s+bills|unnecessary\s+expense|budget\s+room/i.test(text)) {
     scores.Finances += 4;
   }
   if (/job\s+interview|laid\s+off|work\s+deadline|final\s+exam|boss\s+is|performance\s+review/i.test(text)) {
     scores.Work += 4;
   }
 
-  // Keyword matching per category
   const healthTerms = text.match(
     /\b(weight|gain|gaining|overweight|underweight|bmi|fat|chubby|skinny|thin|calories|calorie|diet|dieting|binge|eating|appetite|food|sugar|carbs|metabolism|bloated|bloating|body|physique|shape|workout|gym|exercise|exercising|fitness|cardio|running|sedentary|sleep|sleeping|insomnia|oversleep|tired|exhausted|exhaustion|fatigue|drained|pain|ache|aching|sore|hurt|injury|injured|headache|migraine|stomach|nausea|dizzy|fever|flu|cold|cough|virus|infection|allergy|asthma|breathing|heart|cholesterol|diabetes|thyroid|hormone|period|cramps|pregnancy|pregnant|cancer|surgery|hospital|clinic|doctor|dentist|tooth|vision|eyes|hearing|skin|acne|rash|eczema|hair|balding|aging|knee|joint|muscle|medication|medicine|pills|checkup|diagnosis|scan|therapy|therapist|depression|depressed|panic|ptsd|adhd|health|healthy|unhealthy|sick|illness|symptom|symptoms|energy)\b/gi
   );
@@ -997,7 +987,187 @@ function detectLocalWorryCategory(rootWorry: string, currentCat: string = 'Gener
   return 'General';
 }
 
-function buildContextualFallbackSuggestions(rootWorry: string, category: string = 'General'): {
+function extractCleanTopic(raw: string): string {
+  const cleaned = raw
+    .replace(/^(the\s+)?(fear|worry|anxiety|feeling|stress|pressure)\s+(of|about|that|over|around)\s+/i, '')
+    .replace(/^i\s+(am\s+|feel\s+|have\s+to\s+|need\s+to\s+|want\s+to\s+|can'?t\s+)?(worried|worrying|anxious|scared|afraid|stressed|trying\s+to)?\s*(about|of|that|to)?\s*/i, '')
+    .replace(/\bmy\b/gi, 'your')
+    .replace(/\bmyself\b/gi, 'yourself')
+    .replace(/[.?!]+$/, '')
+    .trim();
+  if (!cleaned) return 'this situation';
+  const words = cleaned.split(/\s+/);
+  const shortPhrase = words.length > 6 ? words.slice(0, 6).join(' ') : cleaned;
+  return shortPhrase.toLowerCase();
+}
+
+// Converts any accidental first-person phrasing in a reframe quote into second-person ("you" / "your")
+function ensureSecondPersonQuote(rawQuote: string): string {
+  let q = rawQuote.trim().replace(/^["“”']+/, '').replace(/["“”']+$/, '');
+  q = q
+    .replace(/\bAm I\b/g, 'Are you')
+    .replace(/\bam I\b/g, 'are you')
+    .replace(/\bDo I\b/g, 'Do you')
+    .replace(/\bdo I\b/g, 'do you')
+    .replace(/\bCan I\b/g, 'Can you')
+    .replace(/\bcan I\b/g, 'can you')
+    .replace(/\bWill I\b/g, 'Will you')
+    .replace(/\bwill I\b/g, 'will you')
+    .replace(/\bShould I\b/g, 'Should you')
+    .replace(/\bshould I\b/g, 'should you')
+    .replace(/\bHave I\b/g, 'Have you')
+    .replace(/\bhave I\b/g, 'have you')
+    .replace(/\bI am\b/g, 'you are')
+    .replace(/\bI'm\b/g, "you're")
+    .replace(/\bI’m\b/g, 'you’re')
+    .replace(/\bI have\b/g, 'you have')
+    .replace(/\bI need\b/g, 'you need')
+    .replace(/\bI can\b/g, 'you can')
+    .replace(/\bI will\b/g, 'you will')
+    .replace(/\bI feel\b/g, 'you feel')
+    .replace(/\bI think\b/g, 'you think')
+    .replace(/\bI\b/g, 'you')
+    .replace(/\bMy\b/g, 'Your')
+    .replace(/\bmy\b/g, 'your')
+    .replace(/\bMyself\b/g, 'Yourself')
+    .replace(/\bmyself\b/g, 'yourself')
+    .replace(/\bme\b/g, 'you');
+  if (q.length > 0) {
+    q = q.charAt(0).toUpperCase() + q.slice(1);
+  }
+  return `“${q}”`;
+}
+
+function hashWorryString(str: string): number {
+  let hash = 0;
+  const clean = str.trim().toLowerCase();
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+// Extracts a constructive, positive subject from a worry (strips negative prefixes like "not getting", "can't find", "failing")
+function extractConstructiveSubject(raw: string): string {
+  const cleaned = raw
+    .replace(/^(the\s+)?(fear|worry|anxiety|feeling|stress|pressure|thought)\s+(of|about|that|over|around)\s+/i, '')
+    .replace(/^i\s+(am\s+|feel\s+|have\s+to\s+|need\s+to\s+|want\s+to\s+|can'?t\s+)?(worried|worrying|anxious|scared|afraid|stressed|trying\s+to|struggling\s+to)?\s*(about|of|that|to|with)?\s*/i, '')
+    .replace(/^(not\s+(getting|finding|having|landing|passing|making|being\s+able\s+to|knowing\s+how\s+to)|can'?t\s+(get|find|land|pass|make|do|finish|start|handle|stop)|unable\s+to\s+(get|find|land|pass|do|finish|start)|failing\s+(to\s+|at\s+|in\s+)?|losing\s+|missing\s+|lack\s+of\s+|having\s+no\s+|no\s+)/i, '')
+    .replace(/\b(a|an|the|my|your|our|some|any)\b/gi, ' ')
+    .replace(/[.?!,;]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (!cleaned || /^(it|this|that|everything|anything|nothing|something)$/i.test(cleaned)) {
+    return '';
+  }
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words.slice(0, 3).join(' ');
+}
+
+function isMalformedActionChip(chip: string): boolean {
+  const lower = chip.trim().toLowerCase();
+  if (!lower || lower.length < 4) return true;
+  // Reject broken negative fragments like "for not getting", "on not getting", "for can't", "of failing"
+  return /\b(for|on|of|about)\s+(not\b|no\b|can'?t\b|cannot\b|never\b|unable\b|failing\b|being\b|having\b)/i.test(
+    lower
+  );
+}
+
+function deduplicateAndRotateSessionItems(
+  candidate: {
+    detectedCategory: GentleContextCategory;
+    what: string[];
+    how: string[];
+    when: string[];
+    reaffirmations: ReaffirmationItem[];
+  },
+  rawWorry: string,
+  excludeWhat: string[] = [],
+  excludeQuotes: string[] = []
+) {
+  const topic = extractCleanTopic(rawWorry);
+  const constructiveGoal = extractConstructiveSubject(rawWorry);
+
+  const dynamicReframe: ReaffirmationItem = {
+    quote: `“Do you need to have ${topic} completely figured out right now, or can you handle one small piece calmly first?”`,
+    sub: `You do not have to solve every detail of ${topic} in a single sitting—one grounded step today is enough.`,
+  };
+
+  const excludeQuoteSet = new Set(excludeQuotes.map((q) => q.trim().toLowerCase()));
+  const excludeWhatSet = new Set(excludeWhat.map((w) => w.trim().toLowerCase()));
+
+  const secondPersonReaffirmations = candidate.reaffirmations.map((r) => ({
+    quote: ensureSecondPersonQuote(r.quote),
+    sub: r.sub,
+  }));
+
+  let filteredReaffirmations = secondPersonReaffirmations.filter(
+    (r) => !excludeQuoteSet.has(r.quote.trim().toLowerCase())
+  );
+
+  const hash = hashWorryString(rawWorry);
+  if (filteredReaffirmations.length === 0) {
+    filteredReaffirmations = [dynamicReframe, ...secondPersonReaffirmations];
+  } else if (
+    excludeQuoteSet.size > 0 &&
+    secondPersonReaffirmations[0] &&
+    excludeQuoteSet.has(secondPersonReaffirmations[0].quote.trim().toLowerCase())
+  ) {
+    filteredReaffirmations = [dynamicReframe, ...filteredReaffirmations];
+  } else if (rawWorry.trim().length > 0 && filteredReaffirmations.length > 1) {
+    const startIdx = hash % filteredReaffirmations.length;
+    filteredReaffirmations = [
+      ...filteredReaffirmations.slice(startIdx),
+      ...filteredReaffirmations.slice(0, startIdx),
+    ];
+  }
+
+  let filteredWhat = candidate.what
+    .filter((w) => !isMalformedActionChip(w))
+    .filter((w) => !excludeWhatSet.has(w.trim().toLowerCase()));
+
+  if (filteredWhat.length < 4) {
+    const constructiveBackupPool = constructiveGoal
+      ? [
+          `prepare 1 part of ${constructiveGoal}`,
+          `list 2 options for ${constructiveGoal}`,
+          `15m focus on ${constructiveGoal}`,
+          `ask 1 tip on ${constructiveGoal}`,
+        ]
+      : [
+          'write 2 concrete options',
+          'do 15 mins focused prep',
+          'pick 1 controllable piece',
+          'ask 1 trusted person',
+        ];
+    for (const item of constructiveBackupPool) {
+      if (
+        !isMalformedActionChip(item) &&
+        !excludeWhatSet.has(item.toLowerCase()) &&
+        !filteredWhat.includes(item)
+      ) {
+        filteredWhat.push(item);
+      }
+    }
+  }
+
+  return {
+    detectedCategory: candidate.detectedCategory,
+    what: filteredWhat.slice(0, 4),
+    how: candidate.how.slice(0, 3),
+    when: candidate.when.slice(0, 3),
+    reaffirmations: filteredReaffirmations.slice(0, 4),
+  };
+}
+
+function buildContextualFallbackSuggestions(
+  rootWorry: string,
+  category: string = 'General',
+  excludeWhat: string[] = [],
+  excludeQuotes: string[] = []
+): {
   detectedCategory: GentleContextCategory;
   what: string[];
   how: string[];
@@ -1007,510 +1177,362 @@ function buildContextualFallbackSuggestions(rootWorry: string, category: string 
   const raw = (rootWorry || '').trim();
   const text = raw.toLowerCase();
   const detectedCategory = detectLocalWorryCategory(raw, category);
-  const cat = detectedCategory.toLowerCase();
+  const displayTopic = extractCleanTopic(raw);
+  const constructiveSubject = extractConstructiveSubject(raw);
 
-  // 0. Self-Worth / Fear of Not Being Good Enough / Impostor Syndrome / Confidence / Fear of Failure
+  const finalize = (res: {
+    detectedCategory: GentleContextCategory;
+    what: string[];
+    how: string[];
+    when: string[];
+    reaffirmations: ReaffirmationItem[];
+  }) => deduplicateAndRotateSessionItems(res, raw, excludeWhat, excludeQuotes);
+
+  // 1. Job Search / Fresher / Getting a Job / Placement / Unemployment / Resume / Career Entry
   if (
-    /good\s*enough|not\s*enough|worthy|unworthy|self[- ]worth|self[- ]doubt|self[- ]esteem|imposter|impostor|inadequate|inadequacy|inferior|insecure|insecurity|confidence|confident|fear\s+of\s+(not\s+being|failing|failure|rejection|being\s+judged)|falling\s+short|measure\s+up|mediocre/i.test(
+    /\b(fresher|not\s+getting\s+(a\s+|any\s+)?(job|role|offer|work|placement|internship)|can'?t\s+(find|get|land)\s+(a\s+)?(job|role|work|internship)|no\s+job|unemploy|job\s*hunt|job\s*search|looking\s+for\s+(a\s+)?job|apply(ing)?\s+for\s+jobs?|placement|campus\s+drive|career\s+start|entry[- ]level|resume|cv|job\s+market|hiring|job\s+application|job\s+opening|getting\s+hired|\bjob\b)\b/i.test(
       text
     )
   ) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['name 1 real strength', 'write 1 honest fact', 'do 1 small step', 'drop 1 harsh rule'],
-      how: ['as a learner', 'without proving', 'kindly to myself'],
+    const isFresher = /\b(fresher|campus|entry[- ]level|graduate|first\s+job|college|internship|placement)\b/i.test(text);
+    return finalize({
+      detectedCategory: 'Work',
+      what: isFresher
+        ? [
+            'tailor 1 fresher resume',
+            'apply to 2 entry roles',
+            'practice 1 intro answer',
+            'message 1 alum for tips',
+            'build 1 mini portfolio item',
+          ]
+        : [
+            'update 1 resume section',
+            'apply to 2 matching roles',
+            'practice 1 interview story',
+            'reach out to 1 contact',
+            'shortlist 3 target roles',
+          ],
+      how: ['one role at a time', '25-min focused block', 'without comparing timelines'],
+      when: ['right now', 'this afternoon', 'tomorrow morning'],
+      reaffirmations: [
+        {
+          quote: isFresher
+            ? '“Does waiting for your first job offer mean you lack talent, or are you still on the path to your first match?”'
+            : '“Does a slow job search erase your capability, or does it just mean you have not met the right team yet?”',
+          sub: 'Every career starts with one door opening—refining one resume section or applying to two roles today is real progress.',
+        },
+        {
+          quote: '“Do you need to solve your entire career tonight, or just take one calm step in your job search today?”',
+          sub: 'You cannot control hiring timelines, but you can control twenty focused minutes on your resume or skills right now.',
+        },
+        {
+          quote: '“Are unanswered applications a verdict on your worth, or just a normal numbers game before your first yes?”',
+          sub: 'You only need one offer to begin—treat yourself kindly and focus on one thoughtful application at a time.',
+        },
+        {
+          quote: '“What if you focused on two quality applications today and gave yourself permission to rest afterward?”',
+          sub: 'Steady, calm daily effort will carry you further than exhausting yourself with worry.',
+        },
+      ],
+    });
+  }
+
+  // 2. Job Interview / Technical Round / Coding Test / Viva / Pitch
+  if (
+    /\b(interview|interviews|technical\s+round|coding\s+round|coding\s+test|hr\s+round|mock\s+interview|recruiter\s+call|pitch|demo|viva|assessment)\b/i.test(
+      text
+    )
+  ) {
+    return finalize({
+      detectedCategory: 'Work',
+      what: [
+        'rehearse 2 key stories',
+        'review 3 common questions',
+        'write 2 questions to ask',
+        'do 1 5-min mock answer',
+      ],
+      how: ['speaking slowly out loud', 'bullet points only', 'calmly with water'],
+      when: ['in 10 mins', 'this evening', 'tomorrow morning'],
+      reaffirmations: [
+        {
+          quote: '“Are you truly unprepared for this interview, or is your mind just rehearsing worst-case scenarios?”',
+          sub: 'Reviewing two honest examples of your work and speaking slowly will ground your confidence when you begin.',
+        },
+        {
+          quote: '“Do you need to memorize every possible answer, or just show how you think clearly and honestly?”',
+          sub: 'Interviewers connect with genuine problem-solving, not robotic perfection—one calm breath before speaking is enough.',
+        },
+      ],
+    });
+  }
+
+  // 3. Exams / Studying / Grades / Academic / Thesis / Failing a Class
+  if (
+    /\b(exam|exams|midterm|finals?|quiz|test|syllabus|study|studying|revision|chapter|lecture|grade|grades|gpa|semester|assignment|homework|essay|thesis|dissertation|paper|failing\s+(my\s+)?(class|course|exam|test))\b/i.test(
+      text
+    )
+  ) {
+    return finalize({
+      detectedCategory: 'Work',
+      what: [
+        'study 1 core topic now',
+        'solve 3 practice questions',
+        'summarize 1 page of notes',
+        'review 1 weak concept',
+      ],
+      how: ['25-min study timer', 'phone in another room', 'one chapter at a time'],
       when: ['right now', 'this evening', 'tomorrow morning'],
       reaffirmations: [
         {
-          quote: '“Am I good enough, or do I need to become better before I can feel confident in myself?”',
-          sub: 'Confidence does not wait for perfection—you are allowed to trust yourself while you are still growing.',
+          quote: '“Do you have to master the entire syllabus in one hour, or can you learn one core topic right now?”',
+          sub: 'Studying one focused section for twenty-five minutes builds real retention and quiets exam panic.',
         },
         {
-          quote: '“Is this fear proof that I am falling short, or am I measuring myself against an impossible standard?”',
-          sub: 'Being hard on yourself only hides how far you have already come; your honest effort today is enough.',
-        },
-        {
-          quote: '“Do I have to prove my worth through every outcome, or am I already worthy before I begin?”',
-          sub: 'When your self-worth is not on trial, you can take small steps with curiosity instead of fear.',
-        },
-        {
-          quote: '“What if being a work in progress is not a flaw, but the most human way to grow?”',
-          sub: 'Give yourself permission to learn at a steady pace without treating every moment like a test.',
+          quote: '“Does feeling overwhelmed by this exam mean you will fail, or does your mind just need a smaller starting point?”',
+          sub: 'Open your notes to a single page, set a short timer, and let momentum build naturally.',
         },
       ],
-    };
+    });
   }
 
-  // 0A. Weight / Body Image / Diet / Fitness / Appearance
+  // 4. Work Deadlines / Boss / Workload / Projects / Layoffs
   if (
-    /\b(weight|gain|gaining|overweight|underweight|bmi|fat|chubby|skinny|calories|calorie|diet|dieting|binge|eating|appetite|bloated|physique|shape|workout|gym|exercise|fitness)\b|weight\s*(gain|loss)|body\s*image|out\s*of\s*shape/i.test(
+    /\b(deadline|workload|backlog|project|client|boss|manager|coworker|colleague|standup|meeting|email|inbox|report|deliverable|presentation|slides|promotion|performance\s+review|laid\s+off|layoff|fired)\b/i.test(
       text
     )
   ) {
-    return {
-      detectedCategory: 'Health',
-      what: ['go for 10m walk', 'drink a glass water', 'plan 1 nourishing meal', 'stretch gently 5m'],
-      how: ['with body kindness', 'no harsh judgment', 'one small habit'],
-      when: ['right now', 'next mealtime', 'tomorrow morning'],
+    return finalize({
+      detectedCategory: 'Work',
+      what: [
+        'list top 2 priorities',
+        'draft rough first version',
+        'send 1 clear status note',
+        'do 15m on first section',
+      ],
+      how: ['rough draft first', '15-min focus block', 'one task at a time'],
+      when: ['right now', 'in 15 mins', 'tomorrow morning'],
       reaffirmations: [
         {
-          quote: '“Do I need to punish my body to change it, or can I care for it kindly one small habit at a time?”',
-          sub: 'Lasting wellbeing grows from patience and steady care rather than harsh self-judgment today.',
+          quote: '“Do you have to finish the entire workload perfectly right now, or just complete the first rough piece?”',
+          sub: 'Starting with an imperfect 15-minute draft breaks the paralysis and puts you back in control.',
         },
         {
-          quote: '“Is my worth as a person measured by a scale, or do I deserve respect and kindness right now?”',
-          sub: 'Treat your body like a dear friend you are gently supporting one day at a time.',
-        },
-        {
-          quote: '“Do I have to fix my entire routine today, or is one ten-minute walk or nourishing meal enough?”',
-          sub: 'Sustainable change happens quietly and peacefully, one calm choice at a time.',
-        },
-        {
-          quote: '“Can I accept where my body is today while still taking gentle care of my health?”',
-          sub: 'Let go of all-or-nothing pressure and focus on feeling cared for in this moment.',
+          quote: '“Does this single work pressure define your worth, or is it one task you can handle step by step?”',
+          sub: 'Pick the single most important item, give it fifteen calm minutes, and let the rest wait its turn.',
         },
       ],
-    };
+    });
   }
 
-  // 0B. Lifestyle Pressure / Status / Expectations / Comparison / Proving Yourself
+  // 5. Housing / Room Hunt / Apartment Search
   if (
-    /\b(lifestyle|status|prestige|prestigious|reputation|image|expectations|expectation|pressure|pressured|society|standards|comparison|comparing|compare|judged|impress|proving)\b/i.test(
+    /\b(room\s*hunt|house\s*hunt|apartment|flat|studio|housing|landlord|sublet|neighborhood|viewing|listings?|roommate\s*search|place\s+to\s+live|find\s+a\s+(room|place|flat|apartment)|rent\s+a\s+(room|place|flat|apartment))\b/i.test(
       text
     )
   ) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['define my own enough', 'mute comparison feeds', 'name 1 real value', 'drop 1 expectation'],
-      how: ['at my own pace', 'without comparing', 'honestly & simply'],
-      when: ['right now', 'this evening', 'tomorrow morning'],
-      reaffirmations: [
-        {
-          quote: '“Am I chasing what genuinely brings me peace, or exhausting myself to look successful to others?”',
-          sub: 'A good life is measured by how calm and honest it feels inside, not how impressive it looks outside.',
-        },
-        {
-          quote: '“Do I need higher status to feel worthy, or am I already enough without performing?”',
-          sub: 'Stepping off the treadmill of comparison gives you back your own quiet joy.',
-        },
-        {
-          quote: '“Whose timeline am I trying to satisfy—my own heart’s, or society’s shifting expectations?”',
-          sub: 'Release the pressure to impress anyone today and breathe into what truly nourishes you.',
-        },
-        {
-          quote: '“What if having peace of mind today is a higher achievement than keeping up with everyone else?”',
-          sub: 'You already have enough and are enough in this present moment.',
-        },
-      ],
-    };
-  }
-
-  // 1. Indecision / Decision-making / Torn / Unsure / Doubt
-  if (
-    /indecis|decid|decision|choos|choice|option|torn|unsure|dilemma|hesitat|uncertain what to pick|second[- ]guess/i.test(
-      text
-    )
-  ) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['list 2 options', 'write pros & cons', 'pick 1 small choice', 'flip a coin test'],
-      how: ['good enough choice', '5-min timer', 'without overthinking'],
-      when: ['in 5 mins', 'after a deep breath', 'before tonight'],
-      reaffirmations: [
-        {
-          quote: '“Do I need to find the one flawless choice, or can I pick a good-enough path and adjust as I go?”',
-          sub: 'Clarity rarely comes from standing still—it grows after you take the first small step.',
-        },
-        {
-          quote: '“Am I truly stuck, or am I just afraid of not being able to predict the whole future before I choose?”',
-          sub: 'Choosing a good-enough option today sets your mind free from spinning in circles.',
-        },
-        {
-          quote: '“Does a good decision require zero doubt, or can I move forward gently even while feeling unsure?”',
-          sub: 'Give yourself permission to decide lightly and treat your choice as an experiment, not a verdict.',
-        },
-        {
-          quote: '“What if both options can teach me something useful, and neither one will ruin my story?”',
-          sub: 'Even a tiny decision unlocks momentum you cannot find by overthinking.',
-        },
-      ],
-    };
-  }
-
-  // 2. Fights / Arguments / Home Tension / Household or Family Conflict
-  if (
-    /fight|fights|fighting|arguing|argument|yell|shouting|conflict|tension|mad at|angry|house|home|roommate|family|parents|mom|dad|sister|brother|partner|spouse|husband|wife|boyfriend|girlfriend/i.test(
-      text
-    )
-  ) {
-    return {
-      detectedCategory: 'Relationships',
-      what: ['take 5m quiet space', 'speak softly & briefly', 'write how i feel', 'step outside 5 mins'],
-      how: ['calmly, low voice', 'listening first', 'without escalating'],
-      when: ['right now', 'once things cool down', 'after a deep breath'],
-      reaffirmations: [
-        {
-          quote: '“Do I have to absorb every loud emotion in the house, or can I step back and protect my calm first?”',
-          sub: 'Taking five quiet minutes of space is not avoidance—it is how you keep your inner peace intact.',
-        },
-        {
-          quote: '“Does a hard argument today mean everything is broken, or do heated moments just need quiet air first?”',
-          sub: 'Choosing a calm pause or gentle boundary is an act of care for everyone in the room.',
-        },
-        {
-          quote: '“Am I responsible for fixing everyone’s mood right now, or am I allowed to pause and breathe?”',
-          sub: 'A few minutes of quiet space can soften even the sharpest disagreement.',
-        },
-        {
-          quote: '“Can I care deeply about the people at home while still holding a boundary around my peace?”',
-          sub: 'You can return to the conversation when hearts and voices feel more settled.',
-        },
-      ],
-    };
-  }
-
-  // 3. Overthinking / Rumination / Racing thoughts / Spiraling
-  if (/overthink|ruminat|spiral|racing mind|looping|can'?t stop thinking|analyz|obsess/i.test(text)) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['brain-dump on paper', 'name 1 true fact', 'step away 5 mins', 'focus on 1 task'],
-      how: ['without judging it', 'on 1 small page', 'gently & slowly'],
-      when: ['right now', 'for 5 mins only', 'before bed tonight'],
-      reaffirmations: [
-        {
-          quote: '“Is replaying this thought ten more times helping me prepare, or is it just stealing my peace tonight?”',
-          sub: 'You can notice your mind chattering without having to solve every "what if" right now.',
-        },
-        {
-          quote: '“Are my anxious what-ifs proven facts, or just loud stories my tired mind is spinning?”',
-          sub: 'Rest your attention on what is physically in front of you; that is enough for now.',
-        },
-        {
-          quote: '“Do I need to solve the whole future in my head tonight, or can I set these thoughts down on paper?”',
-          sub: 'You do not have to figure everything out in a single sitting.',
-        },
-        {
-          quote: '“What if I noticed this worry like a cloud drifting past instead of an urgent command?”',
-          sub: 'Stillness returns the moment you stop arguing with your thoughts and soften your shoulders.',
-        },
-      ],
-    };
-  }
-
-  // 4. Procrastination / Stuck / Putting off / Unmotivated / Lazy
-  if (/procrastinat|putting off|avoid|stuck|unmotivat|behind on|delay|lazy|can'?t start/i.test(text)) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['do just 2 mins', 'open the file', 'write 1 rough line', 'clear desk space'],
-      how: ['ugly draft first', '5-min timer', 'zero perfection'],
-      when: ['in 2 mins', 'right after water', 'this afternoon'],
-      reaffirmations: [
-        {
-          quote: '“Am I actually lazy, or is my mind freezing because I think I have to do this perfectly?”',
-          sub: 'Starting imperfectly for two minutes breaks paralysis far better than waiting for motivation.',
-        },
-        {
-          quote: '“Do I have to finish the whole task right now, or can I just touch the first corner for two minutes?”',
-          sub: 'Give yourself permission to make a messy, pressure-free start right now.',
-        },
-        {
-          quote: '“Will beating myself up for delaying make it easier to start, or will self-kindness get me moving?”',
-          sub: 'Even five focused minutes changes the direction and weight of your whole day.',
-        },
-        {
-          quote: '“What if doing ten percent of this imperfectly today is enough to loosen the knot?”',
-          sub: 'Lower the bar until starting feels light, easy, and kind.',
-        },
-      ],
-    };
-  }
-
-  // 5. Overwhelmed / Burnout / Too much to do / Stressed
-  if (/overwhelm|burnout|burned out|too much|swamped|exhaust|drowning|everything at once|stressed/i.test(text)) {
-    return {
-      detectedCategory: detectedCategory === 'General' ? 'Personal Growth' : detectedCategory,
-      what: ['pick only 1 thing', 'cross off 1 item', 'take 10-min pause', 'ask for extension'],
-      how: ['one piece at a time', 'slowly, no rush', 'dropping perfection'],
-      when: ['right now', 'in 10 mins', 'tomorrow morning'],
-      reaffirmations: [
-        {
-          quote: '“Do I really have to carry the whole mountain at once, or just the single next step in front of me?”',
-          sub: 'Set everything else down for the next ten minutes and let yourself breathe.',
-        },
-        {
-          quote: '“Does resting when I am exhausted mean I am failing, or is rest how I stay whole?”',
-          sub: 'You are human, not a machine; doing one gentle thing today is enough.',
-        },
-        {
-          quote: '“Is everything asking for my urgency today truly worth trading away my inner peace?”',
-          sub: 'Choose the single smallest step and let the rest wait patiently.',
-        },
-        {
-          quote: '“Can I give myself permission to move slowly today and still trust that I will arrive?”',
-          sub: 'Soften your jaw, drop your shoulders, and take things one piece at a time.',
-        },
-      ],
-    };
-  }
-
-  // 6. Loneliness / Social anxiety / Fitting in / Left out
-  if (/lonely|loneliness|alone|left out|awkward|social|no friends|isolated|ignored/i.test(text)) {
-    return {
-      detectedCategory: 'Relationships',
-      what: ['text 1 warm hello', 'visit a cozy cafe', 'call someone kind', 'join 1 small group'],
-      how: ['no pressure', 'warmly & briefly', 'just saying hi'],
-      when: ['in 15 mins', 'this evening', 'this weekend'],
-      reaffirmations: [
-        {
-          quote: '“Does feeling alone tonight mean I am unlovable, or am I just in a quiet season between connections?”',
-          sub: 'Feeling lonely right now is a tender passing season, never a permanent truth about your worth.',
-        },
-        {
-          quote: '“Do I need to be effortlessly outgoing to belong, or is my quiet, honest presence already enough?”',
-          sub: 'Treat yourself with the same gentle companionship you offer to others.',
-        },
-        {
-          quote: '“What if one small, low-pressure hello is all it takes to open a door to warmth?”',
-          sub: 'Connection grows in small, unhurried moments—be gentle with your heart today.',
-        },
-        {
-          quote: '“Can I be a comforting friend to myself tonight instead of judging myself for feeling alone?”',
-          sub: 'Meaningful bonds are still ahead of you, one genuine moment at a time.',
-        },
-      ],
-    };
-  }
-
-  // 7. Future / Direction / Life path / Career uncertainty
-  if (/future|direction|purpose|where i'?m going|life path|falling behind|next chapter|career/i.test(text)) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['plan just this week', 'list 2 curiosities', 'read 1 story', 'talk to a mentor'],
-      how: ['one week ahead', 'with curiosity', 'no 5-year pressure'],
+    return finalize({
+      detectedCategory: /budget|rent|afford|cost|cheap|price|money|deposit/i.test(text) ? 'Finances' : 'Personal Growth',
+      what: ['set max rent cap', 'list 3 room must-haves', 'message 2 listings', 'book 1 room viewing'],
+      how: ['within your rent cap', 'one listing at a time', 'comparing calmly'],
       when: ['this evening', 'tomorrow morning', 'this weekend'],
       reaffirmations: [
         {
-          quote: '“Am I truly falling behind, or am I measuring my own chapter against someone else’s timeline?”',
-          sub: 'You only need enough light for the next small step, not the whole five-year map.',
+          quote: '“Do you have to find the perfect room tonight, or just shortlist two safe, affordable options first?”',
+          sub: 'Finding the right space is a step-by-step search—sending two messages or booking one viewing today is real progress.',
         },
         {
-          quote: '“Do I need the whole future figured out tonight, or can I just follow one honest curiosity this week?”',
-          sub: 'Uncertainty about the future is also open space for new possibilities to take shape.',
-        },
-        {
-          quote: '“Is a meaningful life built by rushing, or by showing up calmly one day at a time?”',
-          sub: 'Stop comparing your quiet beginning to someone else’s highlight reel.',
-        },
-        {
-          quote: '“What if not knowing every answer yet is a normal part of growing into my next chapter?”',
-          sub: 'Every small skill and kindness you practice today carries you forward.',
+          quote: '“Will rushing out of fear help your room hunt, or can you filter calmly by your budget and top three needs?”',
+          sub: 'Setting a clear rent ceiling and three non-negotiables protects both your wallet and your peace of mind.',
         },
       ],
-    };
+    });
   }
 
-  // 8. Mistake / Regret / Guilt / Messed up / Embarrassed
-  if (/mistake|messed up|guilt|regret|embarrass|ashamed|wrong|apolog|failed/i.test(text)) {
-    return {
-      detectedCategory: 'Personal Growth',
-      what: ['send brief apology', 'note 1 lesson', 'fix 1 small part', 'forgive yourself'],
-      how: ['kindly & honestly', 'like a good friend', 'without self-blame'],
-      when: ['in 10 mins', 'today', 'after a quiet walk'],
-      reaffirmations: [
-        {
-          quote: '“Does making a mistake mean I am broken, or does it simply mean I am human and learning?”',
-          sub: 'Speak to yourself right now with the same grace you would offer a dear friend.',
-        },
-        {
-          quote: '“Does one imperfect moment erase all the good I bring, or can I repair what I can and forgive the rest?”',
-          sub: 'Self-kindness heals and teaches far better than harsh self-criticism ever could.',
-        },
-        {
-          quote: '“Will punishing myself change what happened, or am I allowed to take the lesson and move forward lighter?”',
-          sub: 'You can make amends where needed without putting your whole self-worth on trial.',
-        },
-        {
-          quote: '“What if this stumble is something I will look back on with gentler eyes and wiser perspective?”',
-          sub: 'Take a deep breath and let go of punishing yourself for being human.',
-        },
-      ],
-    };
-  }
-
-  // 9. Exams / Studying / School / Grades
-  if (/exam|test|study|class|grade|homework|assignment|thesis|lecture|school|college/i.test(text)) {
-    return {
-      detectedCategory: 'Work',
-      what: ['review 1 topic', 'practice 3 questions', 'summarize 1 page', 'ask a classmate'],
-      how: ['20-min timer', 'one page at a time', 'without multitasking'],
-      when: ['in 10 mins', 'after a short break', 'tonight at 7 pm'],
-      reaffirmations: [
-        {
-          quote: '“Does this single test define my intelligence, or can I focus calmly on learning one topic at a time?”',
-          sub: 'Twenty calm minutes of focus is far stronger than hours of anxious rumination.',
-        },
-        {
-          quote: '“Do I have to master the entire syllabus tonight, or is reviewing one page right now enough?”',
-          sub: 'Open just one section, breathe steadily, and trust your preparation.',
-        },
-        {
-          quote: '“Am I actually unprepared, or is my anxious mind just magnifying the pressure?”',
-          sub: 'You know more than your worry is telling you right now.',
-        },
-        {
-          quote: '“What if I measured today by twenty honest minutes of effort instead of a perfect score?”',
-          sub: 'Step by step, you are building understanding at a steady pace.',
-        },
-      ],
-    };
-  }
-
-  // 10. Work / Interview / Job / Deadlines / Presentation
+  // 6. Impulse Spending / Cravings to Spend / Unnecessary Expenses
   if (
-    /interview|job|resume|presentation|meeting|boss|client|deadline|project|work|email/i.test(text) ||
-    cat === 'work'
+    /\b(craving|impulse|unnecessary\s+expense|unnecessary\s+spend|overspend|shopping|splurg|temptation|control\s+my\s+(craving|spending|expense)|stop\s+buying|spending\s+habit)\b/i.test(
+      text
+    )
   ) {
-    return {
-      detectedCategory: 'Work',
-      what: ['draft 3 bullet points', 'send 1 brief reply', 'outline next step', 'practice 1 answer'],
-      how: ['rough draft first', '10-min focus block', 'one step at a time'],
-      when: ['in 15 mins', 'before lunch', 'tomorrow morning'],
-      reaffirmations: [
-        {
-          quote: '“Does this single work task define my worth, or can I handle it calmly one small step at a time?”',
-          sub: 'Done calmly is far better than chasing an exhausting perfection.',
-        },
-        {
-          quote: '“Am I truly unprepared for this, or is my mind just rehearsing worst-case scenarios?”',
-          sub: 'Draft three simple points, take a breath, and trust the capability you have built.',
-        },
-        {
-          quote: '“Do I have to solve the whole week’s workload right now, or just the next ten-minute block?”',
-          sub: 'You have navigated demanding work days before and found your footing.',
-        },
-        {
-          quote: '“What if a clear, good-enough draft today is far better than carrying perfectionist stress?”',
-          sub: 'Let go of the whole week’s pressure and focus only on the next small piece.',
-        },
-      ],
-    };
-  }
-
-  // 11. Money / Finances / Bills / Budget
-  if (/money|bill|rent|budget|debt|afford|saving|expense|bank|cost|pay/i.test(text) || cat === 'finances') {
-    return {
+    return finalize({
       detectedCategory: 'Finances',
-      what: ['check 1 balance', 'list 3 main bills', 'pause 1 subscription', 'plan 1 week spend'],
+      what: ['wait 24h before buying', 'remove saved card', 'move $10 to savings', 'write 1 true need'],
+      how: ['24-hour pause rule', 'without self-blame', 'one urge at a time'],
+      when: ['right now', 'before checkout', 'for 24 hours'],
+      reaffirmations: [
+        {
+          quote: '“Is this craving asking for another purchase, or is your mind just looking for a quick moment of comfort?”',
+          sub: 'Pausing for twenty-four hours lets the wave of impulse pass while keeping your financial goals gently intact.',
+        },
+        {
+          quote: '“Does feeling an urge to spend mean you lack discipline, or is noticing it right now proof of self-awareness?”',
+          sub: 'Every time you pause between a craving and a checkout button, you build real freedom and self-trust.',
+        },
+      ],
+    });
+  }
+
+  // 7. General Finances / Bills / Debt / Money / Budget
+  if (
+    /\b(money|finance|finances|financial|bill|bills|rent|mortgage|budget|debt|loan|credit\s+card|afford|saving|savings|expense|expenses|bank|balance|broke|paycheck|salary|income|tax|tuition|fee|fees)\b/i.test(
+      text
+    )
+  ) {
+    return finalize({
+      detectedCategory: 'Finances',
+      what: [
+        'check 1 account balance',
+        'list 3 upcoming bills',
+        'set 1 weekly spend limit',
+        'pause 1 unused subscription',
+      ],
       how: ['just the numbers', 'calmly with tea', 'one item at a time'],
-      when: ['in 10 mins', 'this evening', 'this weekend'],
+      when: ['this evening', 'tomorrow morning', 'this weekend'],
       reaffirmations: [
         {
-          quote: '“Will panicking tonight change the numbers, or can I look at one practical piece calmly?”',
-          sub: 'Your worth as a person is never measured by a balance sheet—you can navigate this step by step.',
+          quote: '“Will panicking tonight change the numbers, or can you look at one practical piece calmly?”',
+          sub: 'Your worth as a person is never measured by a balance sheet—facing one small number today builds clarity.',
         },
         {
-          quote: '“Do I need to solve my entire financial future today, or just make one steady adjustment this week?”',
-          sub: 'Clarity replaces fear the moment you look at one item at a time.',
-        },
-        {
-          quote: '“Does a tight season mean I am failing, or am I learning to manage what I have with care?”',
-          sub: 'Be gentle with yourself while you plan the next practical step.',
-        },
-        {
-          quote: '“What if checking just this week’s numbers without self-judgment is enough for today?”',
-          sub: 'Pour a cup of tea, check one item, and leave the rest for tomorrow.',
+          quote: '“Do you need to solve every financial goal this week, or just plan your next seven days of spending?”',
+          sub: 'One clear weekly plan is enough to steady your footing right now.',
         },
       ],
-    };
+    });
   }
 
-  // 12. Sleep / Health / Body / Tired / Doctor
-  if (/sleep|insomnia|tired|pain|doctor|sick|health|symptom|workout|body|eat/i.test(text) || cat === 'health') {
-    return {
+  // 8. Sleep / Insomnia / Tiredness / Exhaustion / Burnout
+  if (
+    /\b(sleep|sleeping|insomnia|awake|oversleep|tired|exhausted|exhaustion|fatigue|drained|burnout|rest)\b/i.test(
+      text
+    )
+  ) {
+    return finalize({
       detectedCategory: 'Health',
-      what: ['drink warm water', 'book checkup', 'stretch 5 mins', 'rest eyes 10 mins'],
-      how: ['slowly & kindly', 'screens off', 'one breath at a time'],
-      when: ['right now', 'before bed tonight', 'tomorrow morning'],
+      what: [
+        'put screens away 20m',
+        'do 5 slow belly breaths',
+        'write tomorrow worries down',
+        'sip warm water calmly',
+      ],
+      how: ['lights dimmed low', 'phone face down', 'without forcing sleep'],
+      when: ['right now', 'tonight before bed', 'for 15 mins'],
       reaffirmations: [
         {
-          quote: '“Will worrying harder heal my body faster, or does my body need patience and gentle care today?”',
-          sub: 'Even resting your eyes and breathing slowly gives your nervous system real relief.',
-        },
-        {
-          quote: '“Are my anxious health what-ifs helping me, or can I take one calm, practical step for my body?”',
-          sub: 'One kind gesture toward your wellbeing today is a meaningful step.',
-        },
-        {
-          quote: '“Is resting when I feel drained a waste of time, or is rest how my body restores itself?”',
-          sub: 'Let your shoulders drop and allow yourself to slow down tonight.',
-        },
-        {
-          quote: '“Can I listen to what my body needs right now with kindness instead of panic?”',
-          sub: 'Drink some water, soften your breath, and be gentle with yourself.',
+          quote: '“Will forcing yourself to sleep make rest come faster, or can you let your body simply rest quietly?”',
+          sub: 'Even resting with your eyes closed and breathing slowly restores your nervous system.',
         },
       ],
-    };
+    });
   }
 
-  // 13. Relationships general
-  if (cat === 'relationships' || /relationship|dating|breakup|trust|love/i.test(text)) {
-    return {
+  // 9. Health / Body / Weight / Fitness / Medical
+  if (detectedCategory === 'Health') {
+    return finalize({
+      detectedCategory: 'Health',
+      what: [
+        'take a 15-min gentle walk',
+        'drink 1 glass of water',
+        'prep 1 nourishing meal',
+        'book 1 checkup or rest',
+      ],
+      how: ['kindly to your body', 'at an easy pace', 'one habit today'],
+      when: ['right now', 'this evening', 'tomorrow morning'],
+      reaffirmations: [
+        {
+          quote: '“Will harsh worry heal your body faster, or does your body need steady, gentle care today?”',
+          sub: 'One small supportive choice today does far more for your wellbeing than hours of self-criticism.',
+        },
+      ],
+    });
+  }
+
+  // 10. Relationships / Family / Partner / Breakup / Friends / Loneliness
+  if (detectedCategory === 'Relationships') {
+    return finalize({
       detectedCategory: 'Relationships',
-      what: ['send a kind text', 'write down feelings', 'ask for a chat', 'give gentle space'],
-      how: ['honestly & softly', 'listening first', 'without rushing'],
-      when: ['in an hour', 'this evening', 'this weekend'],
+      what: [
+        'write unsent thoughts first',
+        'send 1 calm honest message',
+        'ask for a 10-min talk',
+        'take 30m quiet space',
+      ],
+      how: ['with calm "I" statements', 'listening without rush', 'with kind boundaries'],
+      when: ['once things cool', 'this evening', 'tomorrow morning'],
       reaffirmations: [
         {
-          quote: '“Do I need to force an instant answer right now, or can I express my heart honestly and give us grace?”',
-          sub: 'Healthy connection happens at a calm pace—sometimes a little breathing room brings clarity.',
-        },
-        {
-          quote: '“Am I trying to read someone else’s mind, or can I focus on what I can communicate kindly?”',
-          sub: 'Start by writing down what you truly feel before rushing into words.',
-        },
-        {
-          quote: '“Do I have to lose my own peace to keep connection, or do I deserve honesty and warmth?”',
-          sub: 'Your feelings are valid, and you can hold them with gentleness today.',
-        },
-        {
-          quote: '“What if patience and a soft, honest conversation can untangle what overthinking cannot?”',
-          sub: 'Trust that clarity will come when you speak from a grounded place.',
+          quote: '“Do you have to fix this entire relationship tonight, or can you hold your part with calm boundaries?”',
+          sub: 'Giving both yourself and the other person a little breathing room allows honest clarity to return.',
         },
       ],
-    };
+    });
   }
 
-  // 14. Dynamic worry-tailored fallback for any custom worry text
-  const cleanSnippet = raw
-    .replace(/^(the\s+)?(fear|worry|anxiety|feeling)\s+(of|about|that)\s+/i, '')
-    .replace(/^i\s+(am\s+|feel\s+)?(worried|worrying|anxious|scared|afraid)\s+(about|of|that)?\s*/i, '')
-    .trim();
-  const displayTopic = cleanSnippet.length > 0 && cleanSnippet.length <= 42 ? cleanSnippet.toLowerCase() : 'this situation';
+  // 11. Personal Growth / Overthinking / Procrastination / Comparison / Future
+  if (detectedCategory === 'Personal Growth') {
+    return finalize({
+      detectedCategory: 'Personal Growth',
+      what: constructiveSubject
+        ? [
+            `do 10m on ${constructiveSubject}`,
+            `list 2 steps for ${constructiveSubject}`,
+            'write 1 controllable fact',
+            'put phone away for 20m',
+          ]
+        : [
+            'do just 5 mins of starter work',
+            'write 2 pros and cons',
+            'pick 1 small priority today',
+            'step away from comparisons',
+          ],
+      how: ['imperfectly on purpose', '10-min starter timer', 'without comparing timelines'],
+      when: ['right now', 'in 10 mins', 'tomorrow morning'],
+      reaffirmations: [
+        {
+          quote: '“Are you truly falling behind, or are you just comparing your own chapter to someone else’s timeline?”',
+          sub: 'You do not need perfection before you begin—one small, honest step today is enough.',
+        },
+      ],
+    });
+  }
 
-  return {
+  // 12. Constructive Goal Fallback for any other custom worry (never slices negative words like "not getting")
+  return finalize({
     detectedCategory,
-    what: ['write 2 key thoughts', 'pick 1 tiny step', 'take 5m quiet pause', 'talk it through'],
-    how: ['one tiny piece', '5-min timer', 'without perfection'],
-    when: ['in 5 mins', 'before bed tonight', 'tomorrow morning'],
+    what: constructiveSubject
+      ? [
+          `list 2 options for ${constructiveSubject}`,
+          `do 15m prep on ${constructiveSubject}`,
+          `take 1 step toward ${constructiveSubject}`,
+          `ask 1 tip on ${constructiveSubject}`,
+        ]
+      : [
+          'write 2 concrete options',
+          'pick 1 controllable step',
+          'do 10m focused prep',
+          'ask 1 person for input',
+        ],
+    how: ['one small piece', '15-min calm block', 'without perfection'],
+    when: ['in 10 mins', 'this evening', 'tomorrow morning'],
     reaffirmations: [
       {
-        quote: `“Do I need to have ${displayTopic} completely solved right now, or can I take just one calm step first?”`,
+        quote: `“Do you need to have ${displayTopic} completely solved right now, or can you take just one calm step first?”`,
         sub: 'You do not have to carry the whole weight of this at once—setting it on paper is already a beginning.',
       },
       {
-        quote: `“Is my mind showing me the whole truth about ${displayTopic}, or just the loudest worst-case story?”`,
+        quote: `“Are you truly unprepared for ${displayTopic}, or is your mind just rehearsing worst-case scenarios?”`,
         sub: 'Even when things feel uncertain, you can choose one small, grounded response today.',
       },
       {
-        quote: '“Am I good enough to handle this one step at a time, or am I demanding instant perfection from myself?”',
+        quote: `“Is your mind showing you the whole truth about ${displayTopic}, or just the loudest anxious story?”`,
         sub: `You have navigated hard moments before, and you will find your footing with ${displayTopic} too.`,
       },
       {
-        quote: `“What if I stopped fighting the uncertainty around ${displayTopic} and focused only on what is in my hands today?”`,
+        quote: `“What if you stopped fighting the uncertainty around ${displayTopic} and focused only on what is in your hands today?”`,
         sub: 'Release the pressure to fix everything right now and be kind to your mind.',
       },
     ],
-  };
+  });
 }
 
 // Ultra-fast AI Category Detection Endpoint for Step 1 ("What is worrying you right now?")
@@ -1525,7 +1547,7 @@ app.post('/api/detect-worry-category', async (req: Request, res: Response) => {
       return;
     }
 
-    const cacheKey = `cat:v2:${cleanWorry.toLowerCase()}`;
+    const cacheKey = `cat:v5:${cleanWorry.toLowerCase()}`;
     const cached = getCached<{ detectedCategory: GentleContextCategory }>(cacheKey);
     if (cached?.detectedCategory) {
       res.json({ detectedCategory: cached.detectedCategory, source: 'cache' });
@@ -1541,24 +1563,16 @@ app.post('/api/detect-worry-category', async (req: Request, res: Response) => {
     const prompt = `Classify the user's worry into the single best matching theme from:
 ["Health", "Work", "Relationships", "Finances", "Personal Growth"]
 (Only use "General" if the text is meaningless gibberish).
-Examples:
-- "Weight gain", "diet", "insomnia", "back pain", "workout" -> "Health"
-- "the fear of not being good enough", "over pressure for good lifestyle and status", "indecisive", "overthinking", "comparison", "future direction", "procrastinating" -> "Personal Growth"
-- "fights in house", "argument with mom", "lonely", "breakup", "friends" -> "Relationships"
-- "rent is due", "credit card debt", "can't afford", "bills" -> "Finances"
-- "job interview", "deadline", "boss", "final exam", "presentation" -> "Work"
-
 Worry: "${cleanWorry}"`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3-flash-preview',
-      ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3.8-flash'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await client.models.generateContent({
           model: modelName,
           contents: prompt,
           config: {
-            thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -1593,19 +1607,36 @@ Worry: "${cleanWorry}"`;
 
 app.post('/api/worry-trio-suggestions', async (req: Request, res: Response) => {
   try {
-    const { rootWorry = '', category = 'General', force = false } = req.body || {};
+    const {
+      rootWorry = '',
+      category = 'General',
+      force = false,
+      excludeWhat = [],
+      excludeQuotes = [],
+    } = req.body || {};
     const cleanWorry = String(rootWorry).trim();
     const cleanCat = String(category || 'General').trim();
+    const safeExcludeWhat = Array.isArray(excludeWhat)
+      ? excludeWhat.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+    const safeExcludeQuotes = Array.isArray(excludeQuotes)
+      ? excludeQuotes.map((s) => String(s).trim()).filter(Boolean)
+      : [];
 
-    const fallback = buildContextualFallbackSuggestions(cleanWorry, cleanCat);
+    const fallback = buildContextualFallbackSuggestions(
+      cleanWorry,
+      cleanCat,
+      safeExcludeWhat,
+      safeExcludeQuotes
+    );
 
     if (!cleanWorry) {
       res.json({ ...fallback, source: 'default' });
       return;
     }
 
-    const cacheKey = `trio:v6:${cleanWorry.toLowerCase()}`;
-    if (!force) {
+    const cacheKey = `trio:v12:${cleanWorry.toLowerCase()}`;
+    if (!force && safeExcludeWhat.length === 0 && safeExcludeQuotes.length === 0) {
       const cached = getCached<{
         detectedCategory: GentleContextCategory;
         what: string[];
@@ -1627,61 +1658,60 @@ app.post('/api/worry-trio-suggestions', async (req: Request, res: Response) => {
 
     const client = getAiClient();
     if (!client) {
-      res.json({ ...fallback, source: 'heuristics' });
+      res.json({ ...fallback, source: 'semantic-engine' });
       return;
     }
 
-    const prompt = `You are a perceptive CBT cognitive-reframing and micro-action guide.
-The user wrote this worry:
-User's Worry: "${cleanWorry}"
+    const exclusionNotice =
+      safeExcludeWhat.length > 0 || safeExcludeQuotes.length > 0
+        ? `\nCRITICAL SESSION ISOLATION RULE:
+The user is working on a brand-new, independent worry session for "${cleanWorry}".
+Do NOT repeat or echo any of these previous session suggestions or quotes:
+- Previously used steps to avoid: ${JSON.stringify(safeExcludeWhat.slice(0, 8))}
+- Previously used quotes to avoid: ${JSON.stringify(safeExcludeQuotes.slice(0, 4))}`
+        : '';
 
-Perform THREE tasks specifically tailored to "${cleanWorry}":
+    const prompt = `You are a perceptive CBT cognitive-reframing and practical problem-solving guide for the app "Untangle".
+The user wrote this exact worry:
+User's Worry: "${cleanWorry}"
+Selected/Initial Category: "${cleanCat}"${exclusionNotice}
+
+Perform THREE tasks specifically tailored to the real-world meaning and solution of "${cleanWorry}":
 
 PART 1 — Auto-Detect Context Category ("detectedCategory"):
-Classify "${cleanWorry}" into the single most accurate category from this exact list:
+Classify "${cleanWorry}" into the single most accurate category from:
 ["Relationships", "Work", "Health", "Finances", "Personal Growth"]
-(Only use "General" if the input is completely meaningless gibberish).
-- "Relationships": fights in house, family/partner/roommate/friend conflict, arguments, loneliness, social anxiety, dating, breakup, tension at home.
-- "Work": job, career, boss, deadline, interview, presentation, meetings, exams, school, study, college, projects.
-- "Health": weight gain, weight loss, body image, diet, calories, fitness, gym, sleep, insomnia, tired, doctor, pain, illness, physical exhaustion.
-- "Finances": money, bills, rent, debt, budget, savings, expenses, affording things, cost of living.
-- "Personal Growth": fear of not being good enough, self-doubt, imposter syndrome, over pressure for good lifestyle and status, social status, expectations, comparison, indecisive, decision-making, overthinking, procrastination, habits, confidence, future direction, purpose, mistakes/regret.
+(Only use "General" if the input is meaningless gibberish).
 
-PART 2 — Insightful Dilemma Reframes ("reaffirmations"):
-Write 4 distinct, non-repetitive, deeply perceptive cognitive reframes for "${cleanWorry}".
-CRITICAL STYLE RULE:
-Instead of vague self-help clichés (NEVER write generic lines like "I give myself full permission to pause and breathe through this moment's uncertainty"), reframe "${cleanWorry}" into a clear, honest, self-reflective dilemma question that exposes the hidden anxious rule or assumption, exactly like these examples:
-- For "the fear of not being good enough":
-  quote: “Am I good enough, or do I need to become better before I can feel confident in myself?”
-  sub: Confidence does not wait for perfection—you are allowed to trust yourself while you are still growing.
-- For "indecisive":
-  quote: “Do I need to find the one flawless choice, or can I pick a good-enough path and adjust as I go?”
-  sub: Clarity rarely comes from standing still—it grows after you take the first small step.
-- For "over pressure for good lifestyle and status":
-  quote: “Am I chasing what genuinely brings me peace, or exhausting myself to look successful to others?”
-  sub: A good life is measured by how calm and honest it feels inside, not how impressive it looks outside.
+PART 2 — Second-Person Dilemma Perspectives ("reaffirmations"):
+Write 4 distinct, perceptive cognitive reframes specifically about "${cleanWorry}".
+CRITICAL SECOND-PERSON RULE:
+- MUST be written in SECOND PERSON ("you", "your", "yourself") speaking gently to the user—NEVER use first person ("I", "my", "me", "Am I", "Do I").
+- Each object in "reaffirmations" must have:
+  - "quote": A clear, human, 1-sentence SECOND-PERSON dilemma question wrapped in curly quotes “...” (10 to 18 words) directly addressing "${cleanWorry}".
+  - "sub": A warm, grounded 1-sentence second-person reassurance (12 to 18 words) that answers the dilemma with practical clarity and compassion.
 
-Each of the 4 objects in "reaffirmations" must have:
-- "quote": A clear, human, 1-sentence dilemma question wrapped in curly quotes “...” (10 to 18 words) directly unpacking "${cleanWorry}".
-- "sub": A warm, grounded 1-sentence perspective (12 to 18 words) that answers the dilemma with compassion and clarity.
-
-PART 3 — Suggestion Chips ("what", "how", "when"):
-Generate ultra-short, lowercase suggestion chips SPECIFICALLY addressing "${cleanWorry}" (keep each chip 2 to 3 words max so it fits cleanly on a single left-aligned line):
-1. "what": 4 concrete, tiny micro-actions that directly help with "${cleanWorry}" (2 to 3 words max each).
-2. "how": 3 gentle, realistic ways or mindsets to approach "${cleanWorry}" (2 to 3 words max each).
-3. "when": 3 realistic timing anchors suited to "${cleanWorry}" (1 to 3 words max each, e.g. "right now", "before bed tonight", "tomorrow morning").
+PART 3 — Constructive Worry-Solving Action Chips ("what", "how", "when"):
+IMPORTANT: Users often state worries negatively (e.g., "not getting a job as a fresher", "failing my exam", "can't sleep", "no money").
+You MUST invert the negative worry into CONSTRUCTIVE, REAL-WORLD SOLUTIONS:
+- NEVER repeat negative words like "for not getting", "on not getting", "about failing".
+- Example: If worry is "not getting a job as a fresher" or "not getting job":
+  - GOOD "what": ["tailor 1 fresher resume", "apply to 2 entry roles", "practice 1 intro answer", "message 1 alum for tips"]
+  - BAD "what": ["map 2 steps for not getting", "10m focus on not getting"] (NEVER DO THIS!)
+1. "what": 4 concrete, tiny, practical micro-actions (2 to 4 words each, lowercase) that constructively help solve "${cleanWorry}".
+2. "how": 3 gentle, realistic ways or mindsets (2 to 4 words each, lowercase) tailored to doing that specific action for "${cleanWorry}".
+3. "when": 3 realistic timing anchors suited to "${cleanWorry}" (1 to 3 words each, lowercase, e.g. "right now", "this afternoon", "tomorrow morning").
 
 Return ONLY valid JSON.`;
 
     const { result, usedModel } = await executeWithQuotaProtection(
-      'gemini-3-flash-preview',
-      ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'],
+      'gemini-4-hydrogen',
+      ['gemini-3.1-flash-lite'],
       async (modelName) => {
         const response = await client.models.generateContent({
           model: modelName,
           contents: prompt,
           config: {
-            thinkingConfig: { thinkingBudget: 0 },
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -1698,11 +1728,11 @@ Return ONLY valid JSON.`;
                     properties: {
                       quote: {
                         type: Type.STRING,
-                        description: 'First-person positive reaffirmation wrapped in curly quotes “...” specific to the worry',
+                        description: 'Second-person ("you"/"your") dilemma question wrapped in curly quotes “...” specific to the worry',
                       },
                       sub: {
                         type: Type.STRING,
-                        description: 'Gentle 1-sentence grounding support specific to the worry',
+                        description: 'Gentle 1-sentence second-person grounding reassurance specific to the worry',
                       },
                     },
                     required: ['quote', 'sub'],
@@ -1711,12 +1741,12 @@ Return ONLY valid JSON.`;
                 what: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: '4 short (2-3 words max) concrete micro-actions directly tailored to the user worry',
+                  description: '4 short (2-4 words max) constructive micro-actions that help solve the worry',
                 },
                 how: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: '3 short (2-3 words max) gentle ways to do the action tailored to the worry',
+                  description: '3 short (2-4 words max) gentle ways to do the action tailored to the worry',
                 },
                 when: {
                   type: Type.ARRAY,
@@ -1741,14 +1771,23 @@ Return ONLY valid JSON.`;
       Array.isArray(result.when) &&
       result.when.length > 0
     ) {
+      const validWhat = result.what
+        .map((s: string) => String(s).toLowerCase().trim())
+        .filter((s: string) => Boolean(s) && !isMalformedActionChip(s));
+
+      const finalWhat =
+        validWhat.length >= 3
+          ? validWhat.slice(0, 4)
+          : [...validWhat, ...fallback.what].filter((v, i, a) => a.indexOf(v) === i).slice(0, 4);
+
       const cleanedReaffirmations: ReaffirmationItem[] =
         Array.isArray(result.reaffirmations) && result.reaffirmations.length > 0
           ? result.reaffirmations
               .slice(0, 4)
               .map((r: any) => {
-                const rawQuote = String(r?.quote || '').trim().replace(/^["“”']+/, '').replace(/["“”']+$/, '');
+                const rawQuote = String(r?.quote || '').trim();
                 return {
-                  quote: rawQuote ? `“${rawQuote}”` : fallback.reaffirmations[0].quote,
+                  quote: rawQuote ? ensureSecondPersonQuote(rawQuote) : fallback.reaffirmations[0].quote,
                   sub: String(r?.sub || fallback.reaffirmations[0].sub).trim(),
                 };
               })
@@ -1762,24 +1801,375 @@ Return ONLY valid JSON.`;
 
       const cleaned = {
         detectedCategory,
-        what: result.what.slice(0, 4).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
+        what: finalWhat,
         how: result.how.slice(0, 3).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
         when: result.when.slice(0, 3).map((s: string) => String(s).toLowerCase().trim()).filter(Boolean),
         reaffirmations: cleanedReaffirmations.length > 0 ? cleanedReaffirmations : fallback.reaffirmations,
       };
       setCache(cacheKey, cleaned);
-      setCache(`cat:v2:${cleanWorry.toLowerCase()}`, { detectedCategory });
+      setCache(`cat:v5:${cleanWorry.toLowerCase()}`, { detectedCategory });
       res.json({ ...cleaned, source: usedModel || 'gemini' });
       return;
     }
 
-    res.json({ ...fallback, source: 'fallback' });
+    res.json({ ...fallback, source: 'semantic-engine' });
   } catch (error) {
     const fallback = buildContextualFallbackSuggestions(
       (req.body as any)?.rootWorry || '',
-      (req.body as any)?.category || 'General'
+      (req.body as any)?.category || 'General',
+      (req.body as any)?.excludeWhat || [],
+      (req.body as any)?.excludeQuotes || []
     );
-    res.json({ ...fallback, source: 'fallback' });
+    res.json({ ...fallback, source: 'semantic-engine' });
+  }
+});
+
+// Endpoint 8: Google Search Grounding for Real-World Worry Insights & Action Steps (uses gemini-4-hydrogen with googleSearch tool)
+app.post('/api/worry-search-grounding', async (req: Request, res: Response) => {
+  try {
+    const { rootWorry = '', category = 'General' } = req.body || {};
+    const cleanWorry = String(rootWorry).trim();
+    const fallback = buildContextualFallbackSuggestions(cleanWorry, category);
+
+    const buildLocalSearchFallback = () => {
+      const lower = cleanWorry.toLowerCase();
+      if (/\b(fresher|job|career|resume|cv|interview|placement|internship|unemploy|hiring)\b/i.test(lower)) {
+        return {
+          summary:
+            'For freshers navigating a competitive job market, recruiters consistently recommend focusing on proof-of-work projects, tailoring your resume keywords to each entry-level role, and sending short, direct messages to alumni or hiring managers alongside formal applications.',
+          what: fallback.what,
+          how: fallback.how,
+          sources: [
+            { title: 'LinkedIn Jobs — Entry Level & Fresher Roles', uri: 'https://www.linkedin.com/jobs/' },
+            { title: 'Harvard OCS — Resume & Action Verbs Guide', uri: 'https://ocs.fas.harvard.edu/resumes-cvs-cover-letters/' },
+            { title: 'Wellfound — Startup & Entry Tech Roles', uri: 'https://wellfound.com/jobs' },
+          ],
+          source: 'curated-search-fallback',
+        };
+      }
+      if (/\b(room\s*hunt|apartment|flat|rent|housing|lease|move)\b/i.test(lower)) {
+        return {
+          summary:
+            'When searching for a budget room, set a firm all-in monthly cap (including utilities), prepare a brief intro message with your move-in date, and verify listings in person or via live video tour before paying any deposit.',
+          what: fallback.what,
+          how: fallback.how,
+          sources: [
+            { title: 'ConsumerFTC — Avoiding Rental Listing Scams', uri: 'https://consumer.ftc.gov/articles/rental-listing-scams' },
+            { title: 'SpareRoom — Room & Flatshare Search Tips', uri: 'https://www.spareroom.com/' },
+          ],
+          source: 'curated-search-fallback',
+        };
+      }
+      if (/\b(craving|impulse|expense|spend|money|budget|debt|finance|bill|saving)\b/i.test(lower)) {
+        return {
+          summary:
+            'Behavioral finance research shows that adding a 24-hour cooling-off rule before non-essential purchases and removing saved payment autofill reduces impulse spending by over 60% without feeling restrictive.',
+          what: fallback.what,
+          how: fallback.how,
+          sources: [
+            { title: 'CFPB — Budgeting & Saving Practical Tools', uri: 'https://www.consumerfinance.gov/consumer-tools/educator-tools/adult-financial-education/tools-and-resources/' },
+          ],
+          source: 'curated-search-fallback',
+        };
+      }
+      return {
+        summary: `Breaking "${cleanWorry || 'this worry'}" down into one 10-to-15 minute concrete step reduces cognitive overload and shifts your brain from anxious rumination into calm problem-solving.`,
+        what: fallback.what,
+        how: fallback.how,
+        sources: [
+          { title: 'NHS Every Mind Matters — How to Deal with Worry', uri: 'https://www.nhs.uk/every-mind-matters/mental-wellbeing-tips/how-to-deal-with-worry/' },
+          { title: 'CCI — Using the Worry Tree Effectively', uri: 'https://www.cci.health.wa.gov.au/Resources/Looking-After-Yourself/Worry-and-Rumination' },
+        ],
+        source: 'curated-search-fallback',
+      };
+    };
+
+    if (!cleanWorry) {
+      res.json(buildLocalSearchFallback());
+      return;
+    }
+
+    const client = getAiClient();
+    if (!client) {
+      res.json(buildLocalSearchFallback());
+      return;
+    }
+
+    const prompt = `The user is using the "Untangle" worry-tree app and wrote this worry:
+"${cleanWorry}" (Category: ${category})
+
+Use Google Search to find practical, up-to-date, real-world strategies for someone facing "${cleanWorry}".
+Provide:
+1. A warm, practical 2-sentence summary of the most effective real-world approach to "${cleanWorry}" in second person ("you").
+2. After the summary, list 4 ultra-short constructive micro-actions (2 to 4 words each, lowercase) under the exact heading "WHAT_STEPS:" (one per line, prefixed with "- ").
+3. List 3 gentle approaches (2 to 4 words each, lowercase) under the exact heading "HOW_STEPS:" (one per line, prefixed with "- ").`;
+
+    const response = await client.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const rawText = (response.text || '').trim();
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    const sources: Array<{ title: string; uri: string }> = [];
+    for (const chunk of chunks as any[]) {
+      if (chunk?.web?.uri) {
+        sources.push({
+          title: String(chunk.web.title || chunk.web.uri).trim(),
+          uri: String(chunk.web.uri).trim(),
+        });
+      }
+    }
+
+    const whatPart = rawText.split(/WHAT_STEPS:/i)[1]?.split(/HOW_STEPS:/i)[0] || '';
+    const howPart = rawText.split(/HOW_STEPS:/i)[1] || '';
+    const summaryPart = rawText.split(/WHAT_STEPS:/i)[0]?.trim() || rawText.slice(0, 280);
+
+    const parsedWhat = whatPart
+      .split('\n')
+      .map((l) => l.replace(/^[-*•\d.)\s]+/, '').trim().toLowerCase())
+      .filter((l) => l.length >= 4 && l.length <= 36 && !isMalformedActionChip(l))
+      .slice(0, 4);
+
+    const parsedHow = howPart
+      .split('\n')
+      .map((l) => l.replace(/^[-*•\d.)\s]+/, '').trim().toLowerCase())
+      .filter((l) => l.length >= 4 && l.length <= 32)
+      .slice(0, 3);
+
+    const localFallback = buildLocalSearchFallback();
+
+    res.json({
+      summary: summaryPart || localFallback.summary,
+      what: parsedWhat.length >= 2 ? parsedWhat : fallback.what,
+      how: parsedHow.length >= 2 ? parsedHow : fallback.how,
+      sources: sources.length > 0 ? sources.slice(0, 4) : localFallback.sources,
+      source: 'gemini-4-hydrogen-search',
+    });
+  } catch {
+    const cleanWorry = String((req.body as any)?.rootWorry || '').trim();
+    const category = String((req.body as any)?.category || 'General').trim();
+    const fallback = buildContextualFallbackSuggestions(cleanWorry, category);
+    res.json({
+      summary: `Here are grounded, practical steps tailored to "${cleanWorry || 'your worry'}" so you can focus on one small piece at a time.`,
+      what: fallback.what,
+      how: fallback.how,
+      sources: [
+        { title: 'LinkedIn Jobs & Career Guides', uri: 'https://www.linkedin.com/jobs/' },
+        { title: 'CCI — Practical Worry & Problem Solving', uri: 'https://www.cci.health.wa.gov.au/Resources/Looking-After-Yourself/Worry-and-Rumination' },
+      ],
+      source: 'fallback',
+    });
+  }
+});
+
+// Endpoint 9: Multi-Turn Gemini Untangle Companion Chatbot (supports gemini-3.1-flash-lite, gemini-4-hydrogen, gemini-4-argon, gemini-4-carbon, and Google Search Grounding)
+app.post('/api/untangle-chat', async (req: Request, res: Response) => {
+  try {
+    const {
+      messages = [],
+      rootWorry = '',
+      category = 'General',
+      currentWhat = '',
+      currentHow = '',
+      modelTier = 'gemini-4-hydrogen',
+      useSearchGrounding = false,
+    } = req.body || {};
+
+    const cleanWorry = String(rootWorry || '').trim();
+    const lastUserMessage =
+      Array.isArray(messages) && messages.length > 0
+        ? String(messages[messages.length - 1]?.content || '').trim()
+        : '';
+
+    const effectiveTopic = cleanWorry || lastUserMessage || 'your current worry';
+    const fallbackSuggestions = buildContextualFallbackSuggestions(effectiveTopic, category);
+
+    const buildSmartContextualReply = () => {
+      const lower = `${cleanWorry} ${lastUserMessage}`.toLowerCase();
+      if (/\b(fresher|job|career|resume|cv|interview|placement|internship|unemploy|hiring)\b/i.test(lower)) {
+        return {
+          reply:
+            `Not getting a job yet as a fresher is one of the most stressful positions to be in, because "not getting a job" feels like one giant wall. Instead of trying to solve "getting hired" all at once, let's break it into tiny inputs you control today:\n\n` +
+            `1. **One Resume Tweak**: Pick 1 entry-level job description and match 3 of its skill keywords in your resume's top project bullet.\n` +
+            `2. **Two Targeted Applications**: Apply to just 2 fresher/associate roles today—then give yourself permission to stop.\n` +
+            `3. **One Direct Warm Message**: Send a polite 3-line note to a college alum or recruiter asking for 1 tip on their team's hiring.\n\n` +
+            `Tap any of the action chips below to place it directly into your **what?** box on the canvas.`,
+          suggestedWhat: fallbackSuggestions.what,
+          suggestedHow: fallbackSuggestions.how,
+          sources: [
+            { title: 'LinkedIn Jobs — Entry Level Roles', uri: 'https://www.linkedin.com/jobs/' },
+            { title: 'Harvard OCS — Resume Action Verbs & Templates', uri: 'https://ocs.fas.harvard.edu/resumes-cvs-cover-letters/' },
+          ],
+          usedModel: 'semantic-coach',
+        };
+      }
+
+      return {
+        reply:
+          `When we state a worry like "${effectiveTopic}", our mind often frames it as what we *don't* want to happen, which makes it hard to act on. Let's flip it into a tiny, concrete step you can actually do in 10–15 minutes:\n\n` +
+          `• **What you can do**: ${fallbackSuggestions.what.slice(0, 3).join(' · ')}\n` +
+          `• **How to approach it**: ${fallbackSuggestions.how.slice(0, 2).join(' · ')}\n\n` +
+          `You can click any suggestion chip below to fill your canvas step, or tell me a bit more about what feels hardest right now.`,
+        suggestedWhat: fallbackSuggestions.what,
+        suggestedHow: fallbackSuggestions.how,
+        sources: [],
+        usedModel: 'semantic-coach',
+      };
+    };
+
+    const client = getAiClient();
+    if (!client) {
+      res.json(buildSmartContextualReply());
+      return;
+    }
+
+    const allowedModels = [
+      'gemini-3.1-flash-lite',
+      'gemini-4-hydrogen',
+      'gemini-4-argon',
+      'gemini-4-carbon',
+    ];
+    const requestedModel = allowedModels.includes(modelTier) ? modelTier : 'gemini-4-hydrogen';
+
+    const systemInstruction = `You are the "Untangle Companion", a warm, perceptive CBT and practical problem-solving coach built into the Untangle worry-tree journal.
+Current User Context:
+- Active Worry on Canvas: "${cleanWorry || 'Not entered yet'}"
+- Category: "${category}"
+- Current "what?" step: "${currentWhat || 'None selected yet'}"
+- Current "how?" approach: "${currentHow || 'None selected yet'}"
+
+Your Role & Rules:
+1. Speak in warm, clear, grounded SECOND PERSON ("you" / "your").
+2. When a user shares a negatively phrased worry (like "not getting a job as a fresher"), explain gently why "not getting" isn't an action verb—and help them invert it into 2–3 tiny, concrete, controllable micro-actions they can take today (e.g., tailoring 1 resume project bullet, applying to 2 fresher roles, messaging 1 alum).
+3. Keep responses concise (under 130 words), structured, and reassuring.
+4. At the end of your message, always include 3 short (2-4 word) actionable "what?" chips and 2 short (2-3 word) "how?" chips formatted on two lines like:
+SUGGESTED_WHAT: chip one | chip two | chip three
+SUGGESTED_HOW: approach one | approach two`;
+
+    const formattedHistory = Array.isArray(messages)
+      ? messages.slice(-12).map((m: any) => ({
+          role: m.role === 'assistant' || m.role === 'model' ? 'model' : 'user',
+          parts: [{ text: String(m.content || '') }],
+        }))
+      : [{ role: 'user', parts: [{ text: cleanWorry || 'Help me break down this worry.' }] }];
+
+    if (useSearchGrounding) {
+      const searchResponse = await client.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: formattedHistory,
+        config: {
+          systemInstruction,
+          tools: [{ googleSearch: {} }],
+        },
+      });
+
+      const rawReply = (searchResponse.text || '').trim();
+      const chunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const sources: Array<{ title: string; uri: string }> = [];
+      for (const chunk of chunks as any[]) {
+        if (chunk?.web?.uri) {
+          sources.push({
+            title: String(chunk.web.title || chunk.web.uri).trim(),
+            uri: String(chunk.web.uri).trim(),
+          });
+        }
+      }
+
+      const whatMatch = rawReply.match(/SUGGESTED_WHAT:\s*(.+)/i);
+      const howMatch = rawReply.match(/SUGGESTED_HOW:\s*(.+)/i);
+      const cleanReply = rawReply
+        .replace(/SUGGESTED_WHAT:\s*.+/gi, '')
+        .replace(/SUGGESTED_HOW:\s*.+/gi, '')
+        .trim();
+
+      const parsedWhat = whatMatch?.[1]
+        ? whatMatch[1]
+            .split('|')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length >= 4 && !isMalformedActionChip(s))
+        : fallbackSuggestions.what;
+
+      const parsedHow = howMatch?.[1]
+        ? howMatch[1]
+            .split('|')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length >= 4)
+        : fallbackSuggestions.how;
+
+      res.json({
+        reply: cleanReply || buildSmartContextualReply().reply,
+        suggestedWhat: parsedWhat.length > 0 ? parsedWhat.slice(0, 4) : fallbackSuggestions.what,
+        suggestedHow: parsedHow.length > 0 ? parsedHow.slice(0, 3) : fallbackSuggestions.how,
+        sources: sources.slice(0, 4),
+        usedModel: 'gemini-4-hydrogen (googleSearch)',
+      });
+      return;
+    }
+
+    const { result, usedModel } = await executeWithQuotaProtection(
+      requestedModel,
+      ['gemini-4-hydrogen', 'gemini-3.1-flash-lite'],
+      async (modelName) => {
+        const response = await client.models.generateContent({
+          model: modelName,
+          contents: formattedHistory,
+          config: {
+            systemInstruction,
+          },
+        });
+        return response.text;
+      }
+    );
+
+    if (result) {
+      const rawReply = result.trim();
+      const whatMatch = rawReply.match(/SUGGESTED_WHAT:\s*(.+)/i);
+      const howMatch = rawReply.match(/SUGGESTED_HOW:\s*(.+)/i);
+      const cleanReply = rawReply
+        .replace(/SUGGESTED_WHAT:\s*.+/gi, '')
+        .replace(/SUGGESTED_HOW:\s*.+/gi, '')
+        .trim();
+
+      const parsedWhat = whatMatch?.[1]
+        ? whatMatch[1]
+            .split('|')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length >= 4 && !isMalformedActionChip(s))
+        : fallbackSuggestions.what;
+
+      const parsedHow = howMatch?.[1]
+        ? howMatch[1]
+            .split('|')
+            .map((s) => s.trim().toLowerCase())
+            .filter((s) => s.length >= 4)
+        : fallbackSuggestions.how;
+
+      res.json({
+        reply: cleanReply || buildSmartContextualReply().reply,
+        suggestedWhat: parsedWhat.length > 0 ? parsedWhat.slice(0, 4) : fallbackSuggestions.what,
+        suggestedHow: parsedHow.length > 0 ? parsedHow.slice(0, 3) : fallbackSuggestions.how,
+        sources: [],
+        usedModel: usedModel || requestedModel,
+      });
+      return;
+    }
+
+    res.json(buildSmartContextualReply());
+  } catch {
+    const cleanWorry = String((req.body as any)?.rootWorry || '').trim();
+    const category = String((req.body as any)?.category || 'General').trim();
+    const fallbackSuggestions = buildContextualFallbackSuggestions(cleanWorry, category);
+    res.json({
+      reply: `Let's turn "${cleanWorry || 'this worry'}" into one small, concrete step you can take today without pressure. Tap any of the steps below to use it on your canvas.`,
+      suggestedWhat: fallbackSuggestions.what,
+      suggestedHow: fallbackSuggestions.how,
+      sources: [],
+      usedModel: 'semantic-coach',
+    });
   }
 });
 

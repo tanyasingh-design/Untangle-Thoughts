@@ -19,6 +19,7 @@ import { formatReadableSchedule } from './PostcardExportModal';
 
 interface WorryTreeCanvasProps {
   page: DiaryPage;
+  otherPages?: DiaryPage[];
   onUpdatePage: (updated: DiaryPage | ((prev: DiaryPage) => DiaryPage)) => void;
   onNewPage?: () => void;
   onOpenExportPreview?: () => void;
@@ -33,41 +34,45 @@ const GENTLE_CONTEXTS: Array<
 const CONTEXTUAL_REFRAMES: Record<string, Array<{ quote: string; sub: string }>> = {
   General: [
     {
-      quote: '“Do I need to have this whole worry figured out right now, or can I take just one calm step first?”',
+      quote: '“Do you need to have this whole worry figured out right now, or can you take just one calm step first?”',
       sub: "You don't have to carry the entire future today—clarity grows naturally once you touch one small piece.",
     },
     {
-      quote: '“Is my mind showing me a proven fact, or just an anxious story trying to protect me?”',
+      quote: '“Is your mind showing you a proven fact, or just an anxious story trying to protect you?”',
       sub: 'You have walked through uncertainty before and found your footing one honest step at a time.',
     },
     {
-      quote: '“Am I good enough as I am right now, or am I holding myself to an impossible standard?”',
+      quote: '“Are you already good enough as you are right now, or are you holding yourself to an impossible standard?”',
       sub: 'It is safe to soften your shoulders and meet this moment without harsh self-judgment.',
     },
   ],
   Work: [
     {
-      quote: '“Does this single task define my worth, or is it just one piece of work I can approach step by step?”',
+      quote: '“Are you truly unprepared for this, or is your mind just rehearsing worst-case scenarios?”',
+      sub: 'Draft three simple points, take a breath, and trust the capability you have built.',
+    },
+    {
+      quote: '“Does this single task define your worth, or is it just one piece of work you can approach step by step?”',
       sub: 'You are a human being, not a machine, and doing one calm, realistic step today is enough.',
     },
     {
-      quote: "“Do I have to solve tomorrow's entire workload tonight, or can I focus only on the next ten minutes?”",
+      quote: "“Do you have to solve tomorrow's entire workload tonight, or can you focus only on the next ten minutes?”",
       sub: 'Done calmly and imperfectly is far healthier than chasing an exhausting perfection.',
     },
   ],
   Health: [
     {
-      quote: '“Will worrying harder heal my body faster, or does my body need patience and gentle care today?”',
+      quote: '“Will worrying harder heal your body faster, or does your body need patience and gentle care today?”',
       sub: 'Ruminating on what-ifs drains your energy, while one kind choice gives your body real support.',
     },
     {
-      quote: '“Do I need an overnight transformation, or can I care for my health one small habit at a time?”',
+      quote: '“Do you need an overnight transformation, or can you care for your health one small habit at a time?”',
       sub: 'Right now, in this present breath, you can meet your body with kindness instead of pressure.',
     },
   ],
   Relationships: [
     {
-      quote: '“Do I have to carry every emotion in this relationship alone, or can I hold my part with honest boundaries?”',
+      quote: '“Do you have to carry every emotion in this relationship alone, or can you hold your part with honest boundaries?”',
       sub: 'You care deeply, and that is why it hurts—give both yourself and others a little breathing room.',
     },
     {
@@ -77,17 +82,17 @@ const CONTEXTUAL_REFRAMES: Record<string, Array<{ quote: string; sub: string }>>
   ],
   Finances: [
     {
-      quote: "“Will panicking change tomorrow's numbers, or can I look at just one practical piece calmly?”",
+      quote: "“Will panicking change tomorrow's numbers, or can you look at just one practical piece calmly?”",
       sub: 'Your worth is never measured by a balance sheet, and you will figure this out step by step.',
     },
   ],
   'Personal Growth': [
     {
-      quote: '“Am I good enough, or do I need to become better before I can feel confident in myself?”',
+      quote: '“Are you already good enough, or is your mind telling you to be perfect before you can feel confident?”',
       sub: 'Confidence does not require perfection first—you are allowed to trust yourself while you are still growing.',
     },
     {
-      quote: '“Am I truly falling behind, or am I just comparing my own chapter to someone else’s timeline?”',
+      quote: '“Are you truly falling behind, or are you just comparing your own chapter to someone else’s timeline?”',
       sub: 'Life moves in waves and loops, never in a rigid straight line.',
     },
   ],
@@ -357,8 +362,181 @@ const SvgCurvedTypewriter: React.FC<{
   );
 };
 
+function extractClientTopic(raw: string): string {
+  const cleaned = raw
+    .replace(/^(the\s+)?(fear|worry|anxiety|feeling|stress|pressure)\s+(of|about|that|over|around)\s+/i, '')
+    .replace(/^i\s+(am\s+|feel\s+|have\s+to\s+|need\s+to\s+|want\s+to\s+|can'?t\s+)?(worried|worrying|anxious|scared|afraid|stressed|trying\s+to)?\s*(about|of|that|to)?\s*/i, '')
+    .replace(/\bmy\b/gi, 'your')
+    .replace(/\bmyself\b/gi, 'yourself')
+    .replace(/[.?!]+$/, '')
+    .trim();
+  if (!cleaned) return 'this situation';
+  const words = cleaned.split(/\s+/);
+  const shortPhrase = words.length > 6 ? words.slice(0, 6).join(' ') : cleaned;
+  return shortPhrase.toLowerCase();
+}
+
+function ensureClientSecondPersonQuote(rawQuote: string): string {
+  let q = rawQuote.trim().replace(/^["“”']+/, '').replace(/["“”']+$/, '');
+  q = q
+    .replace(/\bAm I\b/g, 'Are you')
+    .replace(/\bam I\b/g, 'are you')
+    .replace(/\bDo I\b/g, 'Do you')
+    .replace(/\bdo I\b/g, 'do you')
+    .replace(/\bCan I\b/g, 'Can you')
+    .replace(/\bcan I\b/g, 'can you')
+    .replace(/\bWill I\b/g, 'Will you')
+    .replace(/\bwill I\b/g, 'will you')
+    .replace(/\bShould I\b/g, 'Should you')
+    .replace(/\bshould I\b/g, 'should you')
+    .replace(/\bHave I\b/g, 'Have you')
+    .replace(/\bhave I\b/g, 'have you')
+    .replace(/\bI am\b/g, 'you are')
+    .replace(/\bI'm\b/g, "you're")
+    .replace(/\bI’m\b/g, 'you’re')
+    .replace(/\bI have\b/g, 'you have')
+    .replace(/\bI need\b/g, 'you need')
+    .replace(/\bI can\b/g, 'you can')
+    .replace(/\bI will\b/g, 'you will')
+    .replace(/\bI feel\b/g, 'you feel')
+    .replace(/\bI think\b/g, 'you think')
+    .replace(/\bI\b/g, 'you')
+    .replace(/\bMy\b/g, 'Your')
+    .replace(/\bmy\b/g, 'your')
+    .replace(/\bMyself\b/g, 'Yourself')
+    .replace(/\bmyself\b/g, 'yourself')
+    .replace(/\bme\b/g, 'you');
+  if (q.length > 0) {
+    q = q.charAt(0).toUpperCase() + q.slice(1);
+  }
+  return `“${q}”`;
+}
+
+function hashClientWorry(str: string): number {
+  let hash = 0;
+  const clean = str.trim().toLowerCase();
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function extractConstructiveClientSubject(raw: string): string {
+  const cleaned = raw
+    .replace(/^(the\s+)?(fear|worry|anxiety|feeling|stress|pressure|thought)\s+(of|about|that|over|around)\s+/i, '')
+    .replace(/^i\s+(am\s+|feel\s+|have\s+to\s+|need\s+to\s+|want\s+to\s+|can'?t\s+)?(worried|worrying|anxious|scared|afraid|stressed|trying\s+to|struggling\s+to)?\s*(about|of|that|to|with)?\s*/i, '')
+    .replace(/^(not\s+(getting|finding|having|landing|passing|making|being\s+able\s+to|knowing\s+how\s+to)|can'?t\s+(get|find|land|pass|make|do|finish|start|handle|stop)|unable\s+to\s+(get|find|land|pass|do|finish|start)|failing\s+(to\s+|at\s+|in\s+)?|losing\s+|missing\s+|lack\s+of\s+|having\s+no\s+|no\s+)/i, '')
+    .replace(/\b(a|an|the|my|your|our|some|any)\b/gi, ' ')
+    .replace(/[.?!,;]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (!cleaned || /^(it|this|that|everything|anything|nothing|something)$/i.test(cleaned)) {
+    return '';
+  }
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words.slice(0, 3).join(' ');
+}
+
+function isMalformedClientActionChip(chip: string): boolean {
+  const lower = chip.trim().toLowerCase();
+  if (!lower || lower.length < 4) return true;
+  return /\b(for|on|of|about)\s+(not\b|no\b|can'?t\b|cannot\b|never\b|unable\b|failing\b|being\b|having\b)/i.test(
+    lower
+  );
+}
+
+function deduplicateAndRotateClientItems(
+  candidate: {
+    detectedCategory: (typeof GENTLE_CONTEXTS)[number];
+    what: string[];
+    how: string[];
+    when: string[];
+    reaffirmations: Array<{ quote: string; sub: string }>;
+  },
+  rawWorry: string,
+  excludeWhat: string[] = [],
+  excludeQuotes: string[] = []
+) {
+  const topic = extractClientTopic(rawWorry);
+  const constructiveGoal = extractConstructiveClientSubject(rawWorry);
+
+  const dynamicReframe = {
+    quote: `“Do you need to have ${topic} completely figured out right now, or can you handle one small piece calmly first?”`,
+    sub: `You do not have to solve every detail of ${topic} in a single sitting—one grounded step today is enough.`,
+  };
+
+  const excludeQuoteSet = new Set(excludeQuotes.map((q) => q.trim().toLowerCase()));
+  const excludeWhatSet = new Set(excludeWhat.map((w) => w.trim().toLowerCase()));
+
+  const secondPersonReaffirmations = candidate.reaffirmations.map((r) => ({
+    quote: ensureClientSecondPersonQuote(r.quote),
+    sub: r.sub,
+  }));
+
+  let filteredReaffirmations = secondPersonReaffirmations.filter(
+    (r) => !excludeQuoteSet.has(r.quote.trim().toLowerCase())
+  );
+
+  const hash = hashClientWorry(rawWorry);
+  if (filteredReaffirmations.length === 0) {
+    filteredReaffirmations = [dynamicReframe, ...secondPersonReaffirmations];
+  } else if (
+    excludeQuoteSet.size > 0 &&
+    secondPersonReaffirmations[0] &&
+    excludeQuoteSet.has(secondPersonReaffirmations[0].quote.trim().toLowerCase())
+  ) {
+    filteredReaffirmations = [dynamicReframe, ...filteredReaffirmations];
+  } else if (rawWorry.trim().length > 0 && filteredReaffirmations.length > 1) {
+    const startIdx = hash % filteredReaffirmations.length;
+    filteredReaffirmations = [
+      ...filteredReaffirmations.slice(startIdx),
+      ...filteredReaffirmations.slice(0, startIdx),
+    ];
+  }
+
+  let filteredWhat = candidate.what
+    .filter((w) => !isMalformedClientActionChip(w))
+    .filter((w) => !excludeWhatSet.has(w.trim().toLowerCase()));
+
+  if (filteredWhat.length < 4) {
+    const constructiveBackupPool = constructiveGoal
+      ? [
+          `prepare 1 part of ${constructiveGoal}`,
+          `list 2 options for ${constructiveGoal}`,
+          `15m focus on ${constructiveGoal}`,
+          `ask 1 tip on ${constructiveGoal}`,
+        ]
+      : [
+          'write 2 concrete options',
+          'do 15 mins focused prep',
+          'pick 1 controllable piece',
+          'ask 1 trusted person',
+        ];
+    for (const item of constructiveBackupPool) {
+      if (
+        !isMalformedClientActionChip(item) &&
+        !excludeWhatSet.has(item.toLowerCase()) &&
+        !filteredWhat.includes(item)
+      ) {
+        filteredWhat.push(item);
+      }
+    }
+  }
+
+  return {
+    detectedCategory: candidate.detectedCategory,
+    what: filteredWhat.slice(0, 4),
+    how: candidate.how.slice(0, 3),
+    when: candidate.when.slice(0, 3),
+    reaffirmations: filteredReaffirmations.slice(0, 4),
+  };
+}
+
 export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
   page,
+  otherPages = [],
   onUpdatePage,
   onNewPage,
   onOpenExportPreview,
@@ -392,6 +570,31 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     scrollTop: number;
   }>({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
   const springDrag = getSpringDragProps(isEditingNode);
+
+  // Extract previously used quotes and steps from other sessions so a new line never repeats stale guidance
+  const otherPagesRef = useRef<DiaryPage[]>(otherPages);
+  otherPagesRef.current = otherPages;
+
+  const activePageIdRef = useRef<string>(page.id);
+  activePageIdRef.current = page.id;
+
+  const getPreviousSessionExclusions = useCallback(() => {
+    const excludeWhat: string[] = [];
+    const excludeQuotes: string[] = [];
+    for (const p of otherPagesRef.current) {
+      if (p.id === activePageIdRef.current) continue;
+      if (p.actionTrio?.what?.trim()) {
+        excludeWhat.push(p.actionTrio.what.trim());
+      }
+      if (p.positiveReframe?.trim()) {
+        const match = p.positiveReframe.trim().match(/^(“[^”]+”|"[^"]+")/);
+        if (match?.[1]) {
+          excludeQuotes.push(match[1].trim());
+        }
+      }
+    }
+    return { excludeWhat, excludeQuotes };
+  }, []);
 
   // Progression stages
   const [unlocked, setUnlocked] = useState<{
@@ -432,34 +635,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     };
   });
 
-  useEffect(() => {
-    const hasWorry = Boolean(page.rootWorry && page.rootWorry.trim().length > 0);
-    const hasReframe = Boolean(page.positiveReframe && page.positiveReframe.trim().length > 0);
-    const canAct = page.canActOnWorry || page.canAct;
-    const hasTrio = Boolean(
-      page.actionTrio?.completed ||
-        page.actionTrio?.what?.trim() ||
-        page.actionTrio?.how?.trim() ||
-        page.actionTrio?.when?.trim()
-    );
-    const actNow =
-      page.canActNow ||
-      (page.actionTiming === 'now' ? 'yes' : page.actionTiming === 'later' ? 'no' : null);
-    const knowWhen = page.knowWhenAct;
-
-    setUnlocked({
-      reframe: hasWorry,
-      fork: hasWorry && hasReframe,
-      noActEnd: canAct === 'no',
-      actionTrio: canAct === 'yes',
-      actNowFork: canAct === 'yes' && hasTrio,
-      doNowEnd: canAct === 'yes' && actNow === 'yes',
-      knowWhenFork: canAct === 'yes' && actNow === 'no',
-      scheduleEnd: canAct === 'yes' && actNow === 'no' && knowWhen === 'yes',
-      noBandwidthEnd: canAct === 'yes' && actNow === 'no' && knowWhen === 'no',
-    });
-  }, [page.id]);
-
   const [reframeIdx, setReframeIdx] = useState(0);
   const reframeIdxRef = useRef(0);
   reframeIdxRef.current = reframeIdx;
@@ -468,580 +643,380 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
   unlockedRef.current = unlocked;
 
   const manualCategoryOverrideRef = useRef<boolean>(false);
+  const lastFetchedWorryRef = useRef<string>('');
+  const aiResolvedWorryRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Instant contextual baseline for category detection, micro-action chips, and insightful dilemma reframes
-  const getLocalContextualSuggestions = useCallback((worryText: string, categoryText: string = 'General') => {
-    const raw = (worryText || '').trim();
-    const text = raw.toLowerCase();
+  // Instant contextual baseline for category detection and second-person dilemma reframes tailored to the worry text
+  const getLocalContextualSuggestions = useCallback(
+    (worryText: string, categoryText: string = 'General') => {
+      const raw = (worryText || '').trim();
+      const text = raw.toLowerCase();
+      const { excludeWhat, excludeQuotes } = getPreviousSessionExclusions();
 
-    // Multi-category scoring so phrases like "Weight gain" or "over pressure for good lifestyle and status"
-    // never fall back to a stale previous category
-    let detectedCategory: (typeof GENTLE_CONTEXTS)[number] = 'General';
+      let detectedCategory: (typeof GENTLE_CONTEXTS)[number] = 'General';
 
-    if (text) {
-      const scores: Record<Exclude<(typeof GENTLE_CONTEXTS)[number], 'General'>, number> = {
-        Health: 0,
-        Relationships: 0,
-        Finances: 0,
-        Work: 0,
-        'Personal Growth': 0,
-      };
+      if (text) {
+        const scores: Record<Exclude<(typeof GENTLE_CONTEXTS)[number], 'General'>, number> = {
+          Health: 0,
+          Relationships: 0,
+          Finances: 0,
+          Work: 0,
+          'Personal Growth': 0,
+        };
 
-      if (/weight\s*(gain|loss)|gaining\s*weight|losing\s*weight|body\s*image|out\s*of\s*shape|blood\s*pressure|hair\s*loss|back\s*pain|chest\s*pain|mental\s*health|panic\s*attack/i.test(text)) {
-        scores.Health += 4;
-      }
-      if (/fights?\s+in\s+(the\s+)?house|at\s+home|mad\s+at\s+me|left\s+out|no\s+friends|break\s*up|relationship|family\s+tension/i.test(text)) {
-        scores.Relationships += 4;
-      }
-      if (/good\s+enough|not\s+enough|fear\s+of\s+not|self[- ]doubt|imposter|impostor|lifestyle|status|social\s+status|good\s+life|society|expectations|pressure\s+to|peer\s+pressure|comparing\s+myself|keep\s+up\s+with|what\s+people\s+think|reputation|prestig|self[- ]worth|indecis|overthink|procrastinat|falling\s+behind/i.test(text)) {
-        scores['Personal Growth'] += 4;
-      }
-      if (/can'?t\s+afford|cost\s+of\s+living|credit\s+card|bank\s+account|student\s+loan|pay\s+rent|pay\s+bills/i.test(text)) {
-        scores.Finances += 4;
-      }
-      if (/job\s+interview|laid\s+off|work\s+deadline|final\s+exam|boss\s+is|performance\s+review/i.test(text)) {
-        scores.Work += 4;
-      }
-
-      const healthTerms = text.match(
-        /\b(weight|gain|gaining|overweight|underweight|bmi|fat|chubby|skinny|thin|calories|calorie|diet|dieting|binge|eating|appetite|food|sugar|carbs|metabolism|bloated|bloating|body|physique|shape|workout|gym|exercise|exercising|fitness|cardio|running|sedentary|sleep|sleeping|insomnia|oversleep|tired|exhausted|exhaustion|fatigue|drained|pain|ache|aching|sore|hurt|injury|injured|headache|migraine|stomach|nausea|dizzy|fever|flu|cold|cough|virus|infection|allergy|asthma|breathing|heart|cholesterol|diabetes|thyroid|hormone|period|cramps|pregnancy|pregnant|cancer|surgery|hospital|clinic|doctor|dentist|tooth|vision|eyes|hearing|skin|acne|rash|eczema|hair|balding|aging|knee|joint|muscle|medication|medicine|pills|checkup|diagnosis|scan|therapy|therapist|depression|depressed|panic|ptsd|adhd|health|healthy|unhealthy|sick|illness|symptom|symptoms|energy)\b/gi
-      );
-      if (healthTerms) scores.Health += healthTerms.length * 2;
-
-      const relationshipTerms = text.match(
-        /\b(fight|fights|fighting|fought|argue|arguing|argument|arguments|quarrel|yell|yelling|shout|shouting|conflict|tension|angry|upset|house|household|home|roommate|roommates|neighbor|family|parents|parent|mom|mother|dad|father|sister|brother|sibling|son|daughter|kids|child|children|baby|partner|spouse|husband|wife|boyfriend|girlfriend|fiance|ex|crush|date|dating|relationship|relationships|marriage|married|divorce|breakup|cheating|betrayal|jealous|jealousy|trust|ghosted|ignored|ignoring|friend|friends|friendship|social|awkward|lonely|loneliness|alone|isolated|excluded|rejected|rejection|abandon|boundaries|toxic|apologize|love)\b/gi
-      );
-      if (relationshipTerms) scores.Relationships += relationshipTerms.length * 2;
-
-      const financeTerms = text.match(
-        /\b(money|finance|finances|financial|bill|bills|rent|mortgage|lease|utilities|budget|budgeting|debt|debts|loan|loans|credit|interest|afford|affording|saving|savings|retirement|invest|investing|investment|stocks|crypto|expense|expenses|spending|overspending|bank|overdraft|balance|cost|costs|inflation|price|prices|expensive|broke|poor|bankrupt|paycheck|payday|salary|wage|income|tax|taxes|tuition|fee|fees|fine|insurance|refund|wealth|rich)\b/gi
-      );
-      if (financeTerms) scores.Finances += financeTerms.length * 2;
-
-      const workTerms = text.match(
-        /\b(work|working|job|jobs|career|profession|office|workplace|company|startup|business|boss|manager|supervisor|coworker|coworkers|colleague|team|client|clients|customer|interview|interviews|resume|cv|hiring|hired|fired|layoff|layoffs|unemployed|quit|quitting|resign|promotion|raise|deadline|deadlines|project|projects|task|tasks|deliverable|presentation|pitch|slides|demo|meeting|meetings|standup|slack|email|emails|inbox|report|code|coding|deployment|launch|workload|overtime|shift|commute|school|college|university|campus|degree|major|class|classes|course|lecture|professor|teacher|student|exam|exams|midterm|test|quiz|study|studying|homework|assignment|essay|thesis|research|grade|grades|gpa|scholarship|internship)\b/gi
-      );
-      if (workTerms) scores.Work += workTerms.length * 2;
-
-      const growthTerms = text.match(
-        /\b(enough|worthy|unworthy|worth|lifestyle|status|prestige|prestigious|reputation|image|expectations|expectation|pressure|pressured|society|standards|standard|comparison|comparing|compare|judged|judging|impress|proving|success|successful|ambition|ambitious|indecisive|indecision|decide|deciding|decision|decisions|choose|choosing|choice|choices|option|options|torn|unsure|uncertain|uncertainty|dilemma|hesitate|hesitating|doubt|doubting|overthink|overthinking|ruminate|ruminating|spiral|spiraling|looping|procrastinate|procrastinating|procrastination|avoid|avoiding|stuck|unmotivated|motivation|lazy|laziness|discipline|willpower|focus|distracted|overwhelmed|overwhelm|burnout|stressed|stress|future|direction|purpose|meaning|falling|behind|lost|mistake|mistakes|regret|regrets|guilt|guilty|embarrassed|shame|ashamed|failure|failing|failed|imposter|impostor|inadequate|insecure|insecurity|confidence|confident|perfectionism|perfectionist|habit|habits|routine|goal|goals|growth|improvement|change|changing|identity|potential|wasting)\b/gi
-      );
-      if (growthTerms) scores['Personal Growth'] += growthTerms.length * 2;
-
-      let bestScore = 0;
-      for (const [catName, score] of Object.entries(scores) as Array<
-        [Exclude<(typeof GENTLE_CONTEXTS)[number], 'General'>, number]
-      >) {
-        if (score > bestScore) {
-          bestScore = score;
-          detectedCategory = catName;
+        if (/weight\s*(gain|loss)|gaining\s*weight|losing\s*weight|body\s*image|out\s*of\s*shape|blood\s*pressure|hair\s*loss|back\s*pain|chest\s*pain|mental\s*health|panic\s*attack/i.test(text)) {
+          scores.Health += 4;
         }
+        if (/fights?\s+in\s+(the\s+)?house|at\s+home|mad\s+at\s+me|left\s+out|no\s+friends|break\s*up|relationship|family\s+tension/i.test(text)) {
+          scores.Relationships += 4;
+        }
+        if (/good\s+enough|not\s+enough|fear\s+of\s+not|self[- ]doubt|imposter|impostor|lifestyle|status|social\s+status|good\s+life|society|expectations|pressure\s+to|peer\s+pressure|comparing\s+myself|keep\s+up\s+with|what\s+people\s+think|reputation|prestig|self[- ]worth|indecis|overthink|procrastinat|falling\s+behind/i.test(text)) {
+          scores['Personal Growth'] += 4;
+        }
+        if (/can'?t\s+afford|cost\s+of\s+living|credit\s+card|bank\s+account|student\s+loan|pay\s+rent|pay\s+bills|unnecessary\s+expense|budget\s+room/i.test(text)) {
+          scores.Finances += 4;
+        }
+        if (/job\s+interview|laid\s+off|work\s+deadline|final\s+exam|boss\s+is|performance\s+review/i.test(text)) {
+          scores.Work += 4;
+        }
+
+        const healthTerms = text.match(
+          /\b(weight|gain|gaining|overweight|underweight|bmi|fat|chubby|skinny|thin|calories|calorie|diet|dieting|binge|eating|appetite|food|sugar|carbs|metabolism|bloated|bloating|body|physique|shape|workout|gym|exercise|exercising|fitness|cardio|running|sedentary|sleep|sleeping|insomnia|oversleep|tired|exhausted|exhaustion|fatigue|drained|pain|ache|aching|sore|hurt|injury|injured|headache|migraine|stomach|nausea|dizzy|fever|flu|cold|cough|virus|infection|allergy|asthma|breathing|heart|cholesterol|diabetes|thyroid|hormone|period|cramps|pregnancy|pregnant|cancer|surgery|hospital|clinic|doctor|dentist|tooth|vision|eyes|hearing|skin|acne|rash|eczema|hair|balding|aging|knee|joint|muscle|medication|medicine|pills|checkup|diagnosis|scan|therapy|therapist|depression|depressed|panic|ptsd|adhd|health|healthy|unhealthy|sick|illness|symptom|symptoms|energy)\b/gi
+        );
+        if (healthTerms) scores.Health += healthTerms.length * 2;
+
+        const relationshipTerms = text.match(
+          /\b(fight|fights|fighting|fought|argue|arguing|argument|arguments|quarrel|yell|yelling|shout|shouting|conflict|tension|angry|upset|house|household|home|roommate|roommates|neighbor|family|parents|parent|mom|mother|dad|father|sister|brother|sibling|son|daughter|kids|child|children|baby|partner|spouse|husband|wife|boyfriend|girlfriend|fiance|ex|crush|date|dating|relationship|relationships|marriage|married|divorce|breakup|cheating|betrayal|jealous|jealousy|trust|ghosted|ignored|ignoring|friend|friends|friendship|social|awkward|lonely|loneliness|alone|isolated|excluded|rejected|rejection|abandon|boundaries|toxic|apologize|love)\b/gi
+        );
+        if (relationshipTerms) scores.Relationships += relationshipTerms.length * 2;
+
+        const financeTerms = text.match(
+          /\b(money|finance|finances|financial|bill|bills|rent|mortgage|lease|utilities|budget|budgeting|debt|debts|loan|loans|credit|interest|afford|affording|saving|savings|retirement|invest|investing|investment|stocks|crypto|expense|expenses|spending|overspending|bank|overdraft|balance|cost|costs|inflation|price|prices|expensive|broke|poor|bankrupt|paycheck|payday|salary|wage|income|tax|taxes|tuition|fee|fees|fine|insurance|refund|wealth|rich)\b/gi
+        );
+        if (financeTerms) scores.Finances += financeTerms.length * 2;
+
+        const workTerms = text.match(
+          /\b(work|working|job|jobs|career|profession|office|workplace|company|startup|business|boss|manager|supervisor|coworker|coworkers|colleague|team|client|clients|customer|interview|interviews|resume|cv|hiring|hired|fired|layoff|layoffs|unemployed|quit|quitting|resign|promotion|raise|deadline|deadlines|project|projects|task|tasks|deliverable|presentation|pitch|slides|demo|meeting|meetings|standup|slack|email|emails|inbox|report|code|coding|deployment|launch|workload|overtime|shift|commute|school|college|university|campus|degree|major|class|classes|course|lecture|professor|teacher|student|exam|exams|midterm|test|quiz|study|studying|homework|assignment|essay|thesis|research|grade|grades|gpa|scholarship|internship)\b/gi
+        );
+        if (workTerms) scores.Work += workTerms.length * 2;
+
+        const growthTerms = text.match(
+          /\b(enough|worthy|unworthy|worth|lifestyle|status|prestige|prestigious|reputation|image|expectations|expectation|pressure|pressured|society|standards|standard|comparison|comparing|compare|judged|judging|impress|proving|success|successful|ambition|ambitious|indecisive|indecision|decide|deciding|decision|decisions|choose|choosing|choice|choices|option|options|torn|unsure|uncertain|uncertainty|dilemma|hesitate|hesitating|doubt|doubting|overthink|overthinking|ruminate|ruminating|spiral|spiraling|looping|procrastinate|procrastinating|procrastination|avoid|avoiding|stuck|unmotivated|motivation|lazy|laziness|discipline|willpower|focus|distracted|overwhelmed|overwhelm|burnout|stressed|stress|future|direction|purpose|meaning|falling|behind|lost|mistake|mistakes|regret|regrets|guilt|guilty|embarrassed|shame|ashamed|failure|failing|failed|imposter|impostor|inadequate|insecure|insecurity|confidence|confident|perfectionism|perfectionist|habit|habits|routine|goal|goals|growth|improvement|change|changing|identity|potential|wasting)\b/gi
+        );
+        if (growthTerms) scores['Personal Growth'] += growthTerms.length * 2;
+
+        let bestScore = 0;
+        for (const [catName, score] of Object.entries(scores) as Array<
+          [Exclude<(typeof GENTLE_CONTEXTS)[number], 'General'>, number]
+        >) {
+          if (score > bestScore) {
+            bestScore = score;
+            detectedCategory = catName;
+          }
+        }
+      } else {
+        detectedCategory =
+          GENTLE_CONTEXTS.find((c) => c.toLowerCase() === (categoryText || 'General').toLowerCase().trim()) ||
+          'General';
       }
-    } else {
-      detectedCategory =
-        GENTLE_CONTEXTS.find((c) => c.toLowerCase() === (categoryText || 'General').toLowerCase().trim()) ||
-        'General';
-    }
 
-    const cat = detectedCategory.toLowerCase();
+      const displayTopic = extractClientTopic(raw);
+      const constructiveSubject = extractConstructiveClientSubject(raw);
 
-    // 0A. Self-Worth / Fear of Not Being Good Enough / Impostor Syndrome / Confidence / Fear of Failure
-    if (
-      /good\s*enough|not\s*enough|worthy|unworthy|self[- ]worth|self[- ]doubt|self[- ]esteem|imposter|impostor|inadequate|inadequacy|inferior|insecure|insecurity|confidence|confident|fear\s+of\s+(not\s+being|failing|failure|rejection|being\s+judged)|falling\s+short|measure\s+up|mediocre/i.test(
-        text
-      )
-    ) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['name 1 real strength', 'write 1 honest fact', 'do 1 small step', 'drop 1 harsh rule'],
-        how: ['as a learner', 'without proving', 'kindly to myself'],
-        when: ['right now', 'this evening', 'tomorrow morning'],
+      const finalize = (res: {
+        detectedCategory: (typeof GENTLE_CONTEXTS)[number];
+        what: string[];
+        how: string[];
+        when: string[];
+        reaffirmations: Array<{ quote: string; sub: string }>;
+      }) => deduplicateAndRotateClientItems(res, raw, excludeWhat, excludeQuotes);
+
+      if (!raw) {
+        return {
+          detectedCategory,
+          what: [],
+          how: [],
+          when: [],
+          reaffirmations: CONTEXTUAL_REFRAMES[detectedCategory] || CONTEXTUAL_REFRAMES.General,
+        };
+      }
+
+      // 1. Job Search / Fresher / Getting a Job / Placement / Unemployment / Resume / Career Entry
+      if (
+        /\b(fresher|not\s+getting\s+(a\s+|any\s+)?(job|role|offer|work|placement|internship)|can'?t\s+(find|get|land)\s+(a\s+)?(job|role|work|internship)|no\s+job|unemploy|job\s*hunt|job\s*search|looking\s+for\s+(a\s+)?job|apply(ing)?\s+for\s+jobs?|placement|campus\s+drive|career\s+start|entry[- ]level|resume|cv|job\s+market|hiring|job\s+application|job\s+opening|getting\s+hired|\bjob\b)\b/i.test(
+          text
+        )
+      ) {
+        const isFresher = /\b(fresher|campus|entry[- ]level|graduate|first\s+job|college|internship|placement)\b/i.test(
+          text
+        );
+        return finalize({
+          detectedCategory: 'Work',
+          what: isFresher
+            ? [
+                'tailor 1 fresher resume',
+                'apply to 2 entry roles',
+                'practice 1 intro answer',
+                'message 1 alum for tips',
+              ]
+            : [
+                'update 1 resume section',
+                'apply to 2 matching roles',
+                'practice 1 interview story',
+                'reach out to 1 contact',
+              ],
+          how: ['one role at a time', '25-min focused block', 'without comparing timelines'],
+          when: ['right now', 'this afternoon', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: isFresher
+                ? '“Does waiting for your first job offer mean you lack talent, or are you still on the path to your first match?”'
+                : '“Does a slow job search erase your capability, or does it just mean you have not met the right team yet?”',
+              sub: 'Every career starts with one door opening—refining one resume section or applying to two roles today is real progress.',
+            },
+            {
+              quote: '“Do you need to solve your entire career tonight, or just take one calm step in your job search today?”',
+              sub: 'You cannot control hiring timelines, but you can control twenty focused minutes on your resume or skills right now.',
+            },
+            {
+              quote: '“Are unanswered applications a verdict on your worth, or just a normal numbers game before your first yes?”',
+              sub: 'You only need one offer to begin—treat yourself kindly and focus on one thoughtful application at a time.',
+            },
+            {
+              quote: '“What if you focused on two quality applications today and gave yourself permission to rest afterward?”',
+              sub: 'Steady, calm daily effort will carry you further than exhausting yourself with worry.',
+            },
+          ],
+        });
+      }
+
+      // 2. Job Interview / Technical Round / Coding Test
+      if (
+        /\b(interview|interviews|technical\s+round|coding\s+round|coding\s+test|hr\s+round|mock\s+interview|recruiter\s+call|pitch|demo|viva|assessment)\b/i.test(
+          text
+        )
+      ) {
+        return finalize({
+          detectedCategory: 'Work',
+          what: [
+            'rehearse 2 key stories',
+            'review 3 common questions',
+            'write 2 questions to ask',
+            'do 1 5-min mock answer',
+          ],
+          how: ['speaking slowly out loud', 'bullet points only', 'calmly with water'],
+          when: ['in 10 mins', 'this evening', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: '“Are you truly unprepared for this interview, or is your mind just rehearsing worst-case scenarios?”',
+              sub: 'Reviewing two honest examples of your work and speaking slowly will ground your confidence when you begin.',
+            },
+            {
+              quote: '“Do you need to memorize every possible answer, or just show how you think clearly and honestly?”',
+              sub: 'Interviewers connect with genuine problem-solving, not robotic perfection—one calm breath before speaking is enough.',
+            },
+          ],
+        });
+      }
+
+      // 3. Exams / Studying / Grades / Academic
+      if (
+        /\b(exam|exams|midterm|finals?|quiz|test|syllabus|study|studying|revision|chapter|lecture|grade|grades|gpa|semester|assignment|homework|essay|thesis|dissertation|paper|failing\s+(my\s+)?(class|course|exam|test))\b/i.test(
+          text
+        )
+      ) {
+        return finalize({
+          detectedCategory: 'Work',
+          what: [
+            'study 1 core topic now',
+            'solve 3 practice questions',
+            'summarize 1 page of notes',
+            'review 1 weak concept',
+          ],
+          how: ['25-min study timer', 'phone in another room', 'one chapter at a time'],
+          when: ['right now', 'this evening', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: '“Do you have to master the entire syllabus in one hour, or can you learn one core topic right now?”',
+              sub: 'Studying one focused section for twenty-five minutes builds real retention and quiets exam panic.',
+            },
+          ],
+        });
+      }
+
+      // 4. Work Deadlines / Boss / Workload / Projects
+      if (
+        /\b(deadline|workload|backlog|project|client|boss|manager|coworker|colleague|standup|meeting|email|inbox|report|deliverable|presentation|slides|promotion|performance\s+review|laid\s+off|layoff|fired)\b/i.test(
+          text
+        )
+      ) {
+        return finalize({
+          detectedCategory: 'Work',
+          what: [
+            'list top 2 priorities',
+            'draft rough first version',
+            'send 1 clear status note',
+            'do 15m on first section',
+          ],
+          how: ['rough draft first', '15-min focus block', 'one task at a time'],
+          when: ['right now', 'in 15 mins', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: '“Do you have to finish the entire workload perfectly right now, or just complete the first rough piece?”',
+              sub: 'Starting with an imperfect 15-minute draft breaks the paralysis and puts you back in control.',
+            },
+          ],
+        });
+      }
+
+      // 5. Housing / Room Hunt / Apartment Search
+      if (
+        /\b(room\s*hunt|house\s*hunt|apartment|flat|studio|housing|landlord|sublet|neighborhood|viewing|listings?|roommate\s*search|place\s+to\s+live|find\s+a\s+(room|place|flat|apartment)|rent\s+a\s+(room|place|flat|apartment))\b/i.test(
+          text
+        )
+      ) {
+        return finalize({
+          detectedCategory: /budget|rent|afford|cost|cheap|price|money|deposit/i.test(text)
+            ? 'Finances'
+            : 'Personal Growth',
+          what: ['set max rent cap', 'list 3 room must-haves', 'message 2 listings', 'book 1 room viewing'],
+          how: ['within your rent cap', 'one listing at a time', 'comparing calmly'],
+          when: ['this evening', 'tomorrow morning', 'this weekend'],
+          reaffirmations: [
+            {
+              quote: '“Do you have to find the perfect room tonight, or just shortlist two safe, affordable options first?”',
+              sub: 'Finding the right space is a step-by-step search—sending two messages or booking one viewing today is real progress.',
+            },
+          ],
+        });
+      }
+
+      // 6. Impulse Spending / Cravings to Spend / Unnecessary Expenses
+      if (
+        /\b(craving|impulse|unnecessary\s+expense|unnecessary\s+spend|overspend|shopping|splurg|temptation|control\s+my\s+(craving|spending|expense)|stop\s+buying|spending\s+habit)\b/i.test(
+          text
+        )
+      ) {
+        return finalize({
+          detectedCategory: 'Finances',
+          what: ['wait 24h before buying', 'remove saved card', 'move $10 to savings', 'write 1 true need'],
+          how: ['24-hour pause rule', 'without self-blame', 'one urge at a time'],
+          when: ['right now', 'before checkout', 'for 24 hours'],
+          reaffirmations: [
+            {
+              quote: '“Is this craving asking for another purchase, or is your mind just looking for a quick moment of comfort?”',
+              sub: 'Pausing for twenty-four hours lets the wave of impulse pass while keeping your financial goals gently intact.',
+            },
+          ],
+        });
+      }
+
+      // 7. General Finances / Bills / Debt / Money
+      if (detectedCategory === 'Finances') {
+        return finalize({
+          detectedCategory: 'Finances',
+          what: [
+            'check 1 account balance',
+            'list 3 upcoming bills',
+            'set 1 weekly spend limit',
+            'pause 1 unused subscription',
+          ],
+          how: ['just the numbers', 'calmly with tea', 'one item at a time'],
+          when: ['this evening', 'tomorrow morning', 'this weekend'],
+          reaffirmations: [
+            {
+              quote: '“Will panicking tonight change the numbers, or can you look at one practical piece calmly?”',
+              sub: 'Your worth as a person is never measured by a balance sheet—facing one small number today builds clarity.',
+            },
+          ],
+        });
+      }
+
+      // 8. Health / Sleep / Fitness
+      if (detectedCategory === 'Health') {
+        return finalize({
+          detectedCategory: 'Health',
+          what: [
+            'take a 15-min gentle walk',
+            'drink 1 glass of water',
+            'prep 1 nourishing meal',
+            'rest eyes for 15 mins',
+          ],
+          how: ['kindly to your body', 'at an easy pace', 'one habit today'],
+          when: ['right now', 'this evening', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: '“Will harsh worry heal your body faster, or does your body need steady, gentle care today?”',
+              sub: 'One small supportive choice today does far more for your wellbeing than hours of self-criticism.',
+            },
+          ],
+        });
+      }
+
+      // 9. Relationships
+      if (detectedCategory === 'Relationships') {
+        return finalize({
+          detectedCategory: 'Relationships',
+          what: [
+            'write unsent thoughts first',
+            'send 1 calm honest message',
+            'ask for a 10-min talk',
+            'take 30m quiet space',
+          ],
+          how: ['with calm "I" statements', 'listening without rush', 'with kind boundaries'],
+          when: ['once things cool', 'this evening', 'tomorrow morning'],
+          reaffirmations: [
+            {
+              quote: '“Do you have to fix this entire relationship tonight, or can you hold your part with calm boundaries?”',
+              sub: 'Giving both yourself and the other person a little breathing room allows honest clarity to return.',
+            },
+          ],
+        });
+      }
+
+      // 10. Constructive Goal Fallback (never slices negative words like "not getting")
+      return finalize({
+        detectedCategory,
+        what: constructiveSubject
+          ? [
+              `list 2 options for ${constructiveSubject}`,
+              `do 15m prep on ${constructiveSubject}`,
+              `take 1 step toward ${constructiveSubject}`,
+              `ask 1 tip on ${constructiveSubject}`,
+            ]
+          : [
+              'write 2 concrete options',
+              'pick 1 controllable step',
+              'do 10m focused prep',
+              'ask 1 person for input',
+            ],
+        how: ['one small piece', '15-min calm block', 'without perfection'],
+        when: ['in 10 mins', 'this evening', 'tomorrow morning'],
         reaffirmations: [
           {
-            quote: '“Am I good enough, or do I need to become better before I can feel confident in myself?”',
-            sub: 'Confidence does not wait for perfection—you are allowed to trust yourself while you are still growing.',
+            quote: `“Do you need to have ${displayTopic} completely solved right now, or can you take just one calm step first?”`,
+            sub: 'You do not have to carry the whole weight of this at once—setting it on paper is already a beginning.',
           },
           {
-            quote: '“Is this fear proof that I am falling short, or am I measuring myself against an impossible standard?”',
-            sub: 'Being hard on yourself only hides how far you have already come; your honest effort today is enough.',
+            quote: `“Are you truly unprepared for ${displayTopic}, or is your mind just rehearsing worst-case scenarios?”`,
+            sub: 'Even when things feel uncertain, you can choose one small, grounded response today.',
           },
           {
-            quote: '“Do I have to prove my worth through every outcome, or am I already worthy before I begin?”',
-            sub: 'When your self-worth is not on trial, you can take small steps with curiosity instead of fear.',
+            quote: `“Is your mind showing you the whole truth about ${displayTopic}, or just the loudest anxious story?”`,
+            sub: `You have navigated hard moments before, and you will find your footing with ${displayTopic} too.`,
           },
           {
-            quote: '“What if being a work in progress is not a flaw, but the most human way to grow?”',
-            sub: 'Give yourself permission to learn at a steady pace without treating every moment like a test.',
+            quote: `“What if you stopped fighting the uncertainty around ${displayTopic} and focused only on what is in your hands today?”`,
+            sub: 'Release the pressure to fix everything right now and be kind to your mind.',
           },
         ],
-      };
-    }
+      });
+    },
+    [getPreviousSessionExclusions]
+  );
 
-    // 0B. Weight / Body Image / Diet / Fitness / Appearance
-    if (
-      /\b(weight|gain|gaining|overweight|underweight|bmi|fat|chubby|skinny|calories|calorie|diet|dieting|binge|eating|appetite|bloated|physique|shape|workout|gym|exercise|fitness)\b|weight\s*(gain|loss)|body\s*image|out\s*of\s*shape/i.test(
-        text
-      )
-    ) {
-      return {
-        detectedCategory: 'Health',
-        what: ['go for 10m walk', 'drink a glass water', 'plan 1 nourishing meal', 'stretch gently 5m'],
-        how: ['with body kindness', 'no harsh judgment', 'one small habit'],
-        when: ['right now', 'next mealtime', 'tomorrow morning'],
-        reaffirmations: [
-          {
-            quote: '“Do I need to punish my body to change it, or can I care for it kindly one small habit at a time?”',
-            sub: 'Lasting wellbeing grows from patience and steady care rather than harsh self-judgment today.',
-          },
-          {
-            quote: '“Is my worth as a person measured by a scale, or do I deserve respect and kindness right now?”',
-            sub: 'Treat your body like a dear friend you are gently supporting one day at a time.',
-          },
-          {
-            quote: '“Do I have to fix my entire routine today, or is one ten-minute walk or nourishing meal enough?”',
-            sub: 'Sustainable change happens quietly and peacefully, one calm choice at a time.',
-          },
-          {
-            quote: '“Can I accept where my body is today while still taking gentle care of my health?”',
-            sub: 'Let go of all-or-nothing pressure and focus on feeling cared for in this moment.',
-          },
-        ],
-      };
-    }
-
-    // 0C. Lifestyle Pressure / Status / Expectations / Comparison
-    if (
-      /\b(lifestyle|status|prestige|prestigious|reputation|image|expectations|expectation|pressure|pressured|society|standards|comparison|comparing|compare|judged|impress|proving)\b/i.test(
-        text
-      )
-    ) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['define my own enough', 'mute comparison feeds', 'name 1 real value', 'drop 1 expectation'],
-        how: ['at my own pace', 'without comparing', 'honestly & simply'],
-        when: ['right now', 'this evening', 'tomorrow morning'],
-        reaffirmations: [
-          {
-            quote: '“Am I chasing what genuinely brings me peace, or exhausting myself to look successful to others?”',
-            sub: 'A good life is measured by how calm and honest it feels inside, not how impressive it looks outside.',
-          },
-          {
-            quote: '“Do I need higher status to feel worthy, or am I already enough without performing?”',
-            sub: 'Stepping off the treadmill of comparison gives you back your own quiet joy.',
-          },
-          {
-            quote: '“Whose timeline am I trying to satisfy—my own heart’s, or society’s shifting expectations?”',
-            sub: 'Release the pressure to impress anyone today and breathe into what truly nourishes you.',
-          },
-          {
-            quote: '“What if having peace of mind today is a higher achievement than keeping up with everyone else?”',
-            sub: 'You already have enough and are enough in this present moment.',
-          },
-        ],
-      };
-    }
-
-    // 1. Indecision / Decision-making
-    if (/indecis|decid|decision|choos|choice|option|torn|unsure|dilemma|hesitat|second[- ]guess/i.test(text)) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['list 2 options', 'write pros & cons', 'pick 1 small choice', 'flip a coin test'],
-        how: ['good enough choice', '5-min timer', 'without overthinking'],
-        when: ['in 5 mins', 'after a deep breath', 'before tonight'],
-        reaffirmations: [
-          {
-            quote: '“Do I need to find the one flawless choice, or can I pick a good-enough path and adjust as I go?”',
-            sub: 'Clarity rarely comes from standing still—it grows after you take the first small step.',
-          },
-          {
-            quote: '“Am I truly stuck, or am I just afraid of not being able to predict the whole future before I choose?”',
-            sub: 'Choosing a good-enough option today sets your mind free from spinning in circles.',
-          },
-          {
-            quote: '“Does a good decision require zero doubt, or can I move forward gently even while feeling unsure?”',
-            sub: 'Give yourself permission to decide lightly and treat your choice as an experiment, not a verdict.',
-          },
-          {
-            quote: '“What if both options can teach me something useful, and neither one will ruin my story?”',
-            sub: 'Even a tiny decision unlocks momentum you cannot find by overthinking.',
-          },
-        ],
-      };
-    }
-
-    // 2. Fights / Arguments / Home Tension
-    if (
-      /fight|fights|fighting|arguing|argument|yell|shouting|conflict|tension|mad at|angry|house|home|roommate|family|parents|mom|dad|sister|brother|partner|spouse|husband|wife|boyfriend|girlfriend/i.test(
-        text
-      )
-    ) {
-      return {
-        detectedCategory: 'Relationships',
-        what: ['take 5m quiet space', 'speak softly & briefly', 'write how i feel', 'step outside 5 mins'],
-        how: ['calmly, low voice', 'listening first', 'without escalating'],
-        when: ['right now', 'once things cool down', 'after a deep breath'],
-        reaffirmations: [
-          {
-            quote: '“Do I have to absorb every loud emotion in the house, or can I step back and protect my calm first?”',
-            sub: 'Taking five quiet minutes of space is not avoidance—it is how you keep your inner peace intact.',
-          },
-          {
-            quote: '“Does a hard argument today mean everything is broken, or do heated moments just need quiet air first?”',
-            sub: 'Choosing a calm pause or gentle boundary is an act of care for everyone in the room.',
-          },
-          {
-            quote: '“Am I responsible for fixing everyone’s mood right now, or am I allowed to pause and breathe?”',
-            sub: 'A few minutes of quiet space can soften even the sharpest disagreement.',
-          },
-          {
-            quote: '“Can I care deeply about the people at home while still holding a boundary around my peace?”',
-            sub: 'You can return to the conversation when hearts and voices feel more settled.',
-          },
-        ],
-      };
-    }
-
-    // 3. Overthinking / Rumination
-    if (/overthink|ruminat|spiral|racing mind|looping|can'?t stop thinking|analyz|obsess/i.test(text)) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['brain-dump on paper', 'name 1 true fact', 'step away 5 mins', 'focus on 1 task'],
-        how: ['without judging it', 'on 1 small page', 'gently & slowly'],
-        when: ['right now', 'for 5 mins only', 'before bed tonight'],
-        reaffirmations: [
-          {
-            quote: '“Is replaying this thought ten more times helping me prepare, or is it just stealing my peace tonight?”',
-            sub: 'You can notice your mind chattering without having to solve every "what if" right now.',
-          },
-          {
-            quote: '“Are my anxious what-ifs proven facts, or just loud stories my tired mind is spinning?”',
-            sub: 'Rest your attention on what is physically in front of you; that is enough for now.',
-          },
-          {
-            quote: '“Do I need to solve the whole future in my head tonight, or can I set these thoughts down on paper?”',
-            sub: 'You do not have to figure everything out in a single sitting.',
-          },
-          {
-            quote: '“What if I noticed this worry like a cloud drifting past instead of an urgent command?”',
-            sub: 'Stillness returns the moment you stop arguing with your thoughts and soften your shoulders.',
-          },
-        ],
-      };
-    }
-
-    // 4. Procrastination / Putting off
-    if (/procrastinat|putting off|avoid|stuck|unmotivat|behind on|delay|lazy|can'?t start/i.test(text)) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['do just 2 mins', 'open the file', 'write 1 rough line', 'clear desk space'],
-        how: ['ugly draft first', '5-min timer', 'zero perfection'],
-        when: ['in 2 mins', 'right after water', 'this afternoon'],
-        reaffirmations: [
-          {
-            quote: '“Am I actually lazy, or is my mind freezing because I think I have to do this perfectly?”',
-            sub: 'Starting imperfectly for two minutes breaks paralysis far better than waiting for motivation.',
-          },
-          {
-            quote: '“Do I have to finish the whole task right now, or can I just touch the first corner for two minutes?”',
-            sub: 'Give yourself permission to make a messy, pressure-free start right now.',
-          },
-          {
-            quote: '“Will beating myself up for delaying make it easier to start, or will self-kindness get me moving?”',
-            sub: 'Even five focused minutes changes the direction and weight of your whole day.',
-          },
-          {
-            quote: '“What if doing ten percent of this imperfectly today is enough to loosen the knot?”',
-            sub: 'Lower the bar until starting feels light, easy, and kind.',
-          },
-        ],
-      };
-    }
-
-    // 5. Overwhelmed / Burnout / Stressed
-    if (/overwhelm|burnout|burned out|too much|swamped|exhaust|drowning|everything at once|stressed/i.test(text)) {
-      return {
-        detectedCategory: detectedCategory === 'General' ? 'Personal Growth' : detectedCategory,
-        what: ['pick only 1 thing', 'cross off 1 item', 'take 10-min pause', 'ask for extension'],
-        how: ['one piece at a time', 'slowly, no rush', 'dropping perfection'],
-        when: ['right now', 'in 10 mins', 'tomorrow morning'],
-        reaffirmations: [
-          {
-            quote: '“Do I really have to carry the whole mountain at once, or just the single next step in front of me?”',
-            sub: 'Set everything else down for the next ten minutes and let yourself breathe.',
-          },
-          {
-            quote: '“Does resting when I am exhausted mean I am failing, or is rest how I stay whole?”',
-            sub: 'You are human, not a machine; doing one gentle thing today is enough.',
-          },
-          {
-            quote: '“Is everything asking for my urgency today truly worth trading away my inner peace?”',
-            sub: 'Choose the single smallest step and let the rest wait patiently.',
-          },
-          {
-            quote: '“Can I give myself permission to move slowly today and still trust that I will arrive?”',
-            sub: 'Soften your jaw, drop your shoulders, and take things one piece at a time.',
-          },
-        ],
-      };
-    }
-
-    // 6. Loneliness / Social anxiety
-    if (/lonely|loneliness|alone|left out|awkward|social|no friends|isolated|ignored/i.test(text)) {
-      return {
-        detectedCategory: 'Relationships',
-        what: ['text 1 warm hello', 'visit a cozy cafe', 'call someone kind', 'join 1 small group'],
-        how: ['no pressure', 'warmly & briefly', 'just saying hi'],
-        when: ['in 15 mins', 'this evening', 'this weekend'],
-        reaffirmations: [
-          {
-            quote: '“Does feeling alone tonight mean I am unlovable, or am I just in a quiet season between connections?”',
-            sub: 'Feeling lonely right now is a tender passing season, never a permanent truth about your worth.',
-          },
-          {
-            quote: '“Do I need to be effortlessly outgoing to belong, or is my quiet, honest presence already enough?”',
-            sub: 'Treat yourself with the same gentle companionship you offer to others.',
-          },
-          {
-            quote: '“What if one small, low-pressure hello is all it takes to open a door to warmth?”',
-            sub: 'Connection grows in small, unhurried moments—be gentle with your heart today.',
-          },
-          {
-            quote: '“Can I be a comforting friend to myself tonight instead of judging myself for feeling alone?”',
-            sub: 'Meaningful bonds are still ahead of you, one genuine moment at a time.',
-          },
-        ],
-      };
-    }
-
-    // 7. Future / Direction / Life path
-    if (/future|direction|purpose|where i'?m going|life path|falling behind|next chapter|career/i.test(text)) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['plan just this week', 'list 2 curiosities', 'read 1 story', 'talk to a mentor'],
-        how: ['one week ahead', 'with curiosity', 'no 5-year pressure'],
-        when: ['this evening', 'tomorrow morning', 'this weekend'],
-        reaffirmations: [
-          {
-            quote: '“Am I truly falling behind, or am I measuring my own chapter against someone else’s timeline?”',
-            sub: 'You only need enough light for the next small step, not the whole five-year map.',
-          },
-          {
-            quote: '“Do I need the whole future figured out tonight, or can I just follow one honest curiosity this week?”',
-            sub: 'Uncertainty about the future is also open space for new possibilities to take shape.',
-          },
-          {
-            quote: '“Is a meaningful life built by rushing, or by showing up calmly one day at a time?”',
-            sub: 'Stop comparing your quiet beginning to someone else’s highlight reel.',
-          },
-          {
-            quote: '“What if not knowing every answer yet is a normal part of growing into my next chapter?”',
-            sub: 'Every small skill and kindness you practice today carries you forward.',
-          },
-        ],
-      };
-    }
-
-    // 8. Mistake / Regret / Guilt
-    if (/mistake|messed up|guilt|regret|embarrass|ashamed|wrong|apolog|failed/i.test(text)) {
-      return {
-        detectedCategory: 'Personal Growth',
-        what: ['send brief apology', 'note 1 lesson', 'fix 1 small part', 'forgive yourself'],
-        how: ['kindly & honestly', 'like a good friend', 'without self-blame'],
-        when: ['in 10 mins', 'today', 'after a quiet walk'],
-        reaffirmations: [
-          {
-            quote: '“Does making a mistake mean I am broken, or does it simply mean I am human and learning?”',
-            sub: 'Speak to yourself right now with the same grace you would offer a dear friend.',
-          },
-          {
-            quote: '“Does one imperfect moment erase all the good I bring, or can I repair what I can and forgive the rest?”',
-            sub: 'Self-kindness heals and teaches far better than harsh self-criticism ever could.',
-          },
-          {
-            quote: '“Will punishing myself change what happened, or am I allowed to take the lesson and move forward lighter?”',
-            sub: 'You can make amends where needed without putting your whole self-worth on trial.',
-          },
-          {
-            quote: '“What if this stumble is something I will look back on with gentler eyes and wiser perspective?”',
-            sub: 'Take a deep breath and let go of punishing yourself for being human.',
-          },
-        ],
-      };
-    }
-
-    // 9. Exams / Studying / School
-    if (/exam|test|study|class|grade|homework|assignment|thesis|lecture|school|college/i.test(text)) {
-      return {
-        detectedCategory: 'Work',
-        what: ['review 1 topic', 'practice 3 questions', 'summarize 1 page', 'ask a classmate'],
-        how: ['20-min timer', 'one page at a time', 'without multitasking'],
-        when: ['in 10 mins', 'after a short break', 'tonight at 7 pm'],
-        reaffirmations: [
-          {
-            quote: '“Does this single test define my intelligence, or can I focus calmly on learning one topic at a time?”',
-            sub: 'Twenty calm minutes of focus is far stronger than hours of anxious rumination.',
-          },
-          {
-            quote: '“Do I have to master the entire syllabus tonight, or is reviewing one page right now enough?”',
-            sub: 'Open just one section, breathe steadily, and trust your preparation.',
-          },
-          {
-            quote: '“Am I actually unprepared, or is my anxious mind just magnifying the pressure?”',
-            sub: 'You know more than your worry is telling you right now.',
-          },
-          {
-            quote: '“What if I measured today by twenty honest minutes of effort instead of a perfect score?”',
-            sub: 'Step by step, you are building understanding at a steady pace.',
-          },
-        ],
-      };
-    }
-
-    // 10. Work / Interview / Job / Deadlines
-    if (/interview|job|resume|presentation|meeting|boss|client|deadline|project|work|email/i.test(text) || cat === 'work') {
-      return {
-        detectedCategory: 'Work',
-        what: ['draft 3 bullet points', 'send 1 brief reply', 'outline next step', 'practice 1 answer'],
-        how: ['rough draft first', '10-min focus block', 'one step at a time'],
-        when: ['in 15 mins', 'before lunch', 'tomorrow morning'],
-        reaffirmations: [
-          {
-            quote: '“Does this single work task define my worth, or can I handle it calmly one small step at a time?”',
-            sub: 'Done calmly is far better than chasing an exhausting perfection.',
-          },
-          {
-            quote: '“Am I truly unprepared for this, or is my mind just rehearsing worst-case scenarios?”',
-            sub: 'Draft three simple points, take a breath, and trust the capability you have built.',
-          },
-          {
-            quote: '“Do I have to solve the whole week’s workload right now, or just the next ten-minute block?”',
-            sub: 'You have navigated demanding work days before and found your footing.',
-          },
-          {
-            quote: '“What if a clear, good-enough draft today is far better than carrying perfectionist stress?”',
-            sub: 'Let go of the whole week’s pressure and focus only on the next small piece.',
-          },
-        ],
-      };
-    }
-
-    // 11. Money / Finances
-    if (/money|bill|rent|budget|debt|afford|saving|expense|bank|cost|pay/i.test(text) || cat === 'finances') {
-      return {
-        detectedCategory: 'Finances',
-        what: ['check 1 balance', 'list 3 main bills', 'pause 1 subscription', 'plan 1 week spend'],
-        how: ['just the numbers', 'calmly with tea', 'one item at a time'],
-        when: ['in 10 mins', 'this evening', 'this weekend'],
-        reaffirmations: [
-          {
-            quote: '“Will panicking tonight change the numbers, or can I look at one practical piece calmly?”',
-            sub: 'Your worth as a person is never measured by a balance sheet—you can navigate this step by step.',
-          },
-          {
-            quote: '“Do I need to solve my entire financial future today, or just make one steady adjustment this week?”',
-            sub: 'Clarity replaces fear the moment you look at one item at a time.',
-          },
-          {
-            quote: '“Does a tight season mean I am failing, or am I learning to manage what I have with care?”',
-            sub: 'Be gentle with yourself while you plan the next practical step.',
-          },
-          {
-            quote: '“What if checking just this week’s numbers without self-judgment is enough for today?”',
-            sub: 'Pour a cup of tea, check one item, and leave the rest for tomorrow.',
-          },
-        ],
-      };
-    }
-
-    // 12. Sleep / Health / Body
-    if (/sleep|insomnia|tired|pain|doctor|sick|health|symptom|workout|body|eat/i.test(text) || cat === 'health') {
-      return {
-        detectedCategory: 'Health',
-        what: ['drink warm water', 'book checkup', 'stretch 5 mins', 'rest eyes 10 mins'],
-        how: ['slowly & kindly', 'screens off', 'one breath at a time'],
-        when: ['right now', 'before bed tonight', 'tomorrow morning'],
-        reaffirmations: [
-          {
-            quote: '“Will worrying harder heal my body faster, or does my body need patience and gentle care today?”',
-            sub: 'Even resting your eyes and breathing slowly gives your nervous system real relief.',
-          },
-          {
-            quote: '“Are my anxious health what-ifs helping me, or can I take one calm, practical step for my body?”',
-            sub: 'One kind gesture toward your wellbeing today is a meaningful step.',
-          },
-          {
-            quote: '“Is resting when I feel drained a waste of time, or is rest how my body restores itself?”',
-            sub: 'Let your shoulders drop and allow yourself to slow down tonight.',
-          },
-          {
-            quote: '“Can I listen to what my body needs right now with kindness instead of panic?”',
-            sub: 'Drink some water, soften your breath, and be gentle with yourself.',
-          },
-        ],
-      };
-    }
-
-    // 13. Relationships general
-    if (cat === 'relationships' || /relationship|dating|breakup|trust|love/i.test(text)) {
-      return {
-        detectedCategory: 'Relationships',
-        what: ['send a kind text', 'write down feelings', 'ask for a chat', 'give gentle space'],
-        how: ['honestly & softly', 'listening first', 'without rushing'],
-        when: ['in an hour', 'this evening', 'this weekend'],
-        reaffirmations: [
-          {
-            quote: '“Do I need to force an instant answer right now, or can I express my heart honestly and give us grace?”',
-            sub: 'Healthy connection happens at a calm pace—sometimes a little breathing room brings clarity.',
-          },
-          {
-            quote: '“Am I trying to read someone else’s mind, or can I focus on what I can communicate kindly?”',
-            sub: 'Start by writing down what you truly feel before rushing into words.',
-          },
-          {
-            quote: '“Do I have to lose my own peace to keep connection, or do I deserve honesty and warmth?”',
-            sub: 'Your feelings are valid, and you can hold them with gentleness today.',
-          },
-          {
-            quote: '“What if patience and a soft, honest conversation can untangle what overthinking cannot?”',
-            sub: 'Trust that clarity will come when you speak from a grounded place.',
-          },
-        ],
-      };
-    }
-
-    const cleanSnippet = raw
-      .replace(/^(the\s+)?(fear|worry|anxiety|feeling)\s+(of|about|that)\s+/i, '')
-      .replace(/^i\s+(am\s+|feel\s+)?(worried|worrying|anxious|scared|afraid)\s+(about|of|that)?\s*/i, '')
-      .trim();
-    const displayTopic = cleanSnippet.length > 0 && cleanSnippet.length <= 42 ? cleanSnippet.toLowerCase() : 'this situation';
-
-    return {
-      detectedCategory,
-      what: ['write 2 key thoughts', 'pick 1 tiny step', 'take 5m quiet pause', 'talk it through'],
-      how: ['one tiny piece', '5-min timer', 'without perfection'],
-      when: ['in 5 mins', 'before bed tonight', 'tomorrow morning'],
-      reaffirmations: [
-        {
-          quote: `“Do I need to have ${displayTopic} completely solved right now, or can I take just one calm step first?”`,
-          sub: 'You do not have to carry the whole weight of this at once—setting it on paper is already a beginning.',
-        },
-        {
-          quote: `“Is my mind showing me the whole truth about ${displayTopic}, or just the loudest worst-case story?”`,
-          sub: 'Even when things feel uncertain, you can choose one small, grounded response today.',
-        },
-        {
-          quote: '“Am I good enough to handle this one step at a time, or am I demanding instant perfection from myself?”',
-          sub: `You have navigated hard moments before, and you will find your footing with ${displayTopic} too.`,
-        },
-        {
-          quote: `“What if I stopped fighting the uncertainty around ${displayTopic} and focused only on what is in my hands today?”`,
-          sub: 'Release the pressure to fix everything right now and be kind to your mind.',
-        },
-      ],
-    };
-  }, []);
-
-  // AI-generated contextual suggestions (what / how / when) + worry-specific dilemma reframes
+  // AI-generated contextual suggestions (what / how / when) — populated with semantic & AI-tailored suggestions
   const [trioSuggestions, setTrioSuggestions] = useState<{
     what: string[];
     how: string[];
@@ -1050,12 +1025,12 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     const initial = getLocalContextualSuggestions(page.rootWorry || '', page.category || 'General');
     return { what: initial.what, how: initial.how, when: initial.when };
   });
+
   const [worryReaffirmations, setWorryReaffirmations] = useState<Array<{ quote: string; sub: string }>>(() => {
     const initial = getLocalContextualSuggestions(page.rootWorry || '', page.category || 'General');
     return initial.reaffirmations;
   });
   const [isLoadingTrioSuggestions, setIsLoadingTrioSuggestions] = useState<boolean>(false);
-  const lastFetchedWorryRef = useRef<string>('');
 
   const applyTailoredSuggestions = useCallback(
     (
@@ -1066,11 +1041,11 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
         when?: string[];
         reaffirmations?: Array<{ quote: string; sub: string }>;
       },
-      options?: { preserveVisibleReframe?: boolean }
+      options?: { preserveVisibleReframe?: boolean; isAiTailored?: boolean }
     ) => {
       if (nextData.what && nextData.how && nextData.when) {
         setTrioSuggestions({
-          what: nextData.what,
+          what: nextData.what.filter((w) => !isMalformedClientActionChip(w)),
           how: nextData.how,
           when: nextData.when,
         });
@@ -1078,14 +1053,14 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
 
       const nextReaffirmations =
         Array.isArray(nextData.reaffirmations) && nextData.reaffirmations.length > 0
-          ? nextData.reaffirmations
+          ? nextData.reaffirmations.map((r) => ({
+              quote: ensureClientSecondPersonQuote(r.quote),
+              sub: r.sub,
+            }))
           : undefined;
 
       if (nextReaffirmations) {
         setWorryReaffirmations((prevList) => {
-          // CRITICAL: If Node 2 (reframe) is already visible on screen and we are receiving a delayed
-          // background response, keep the currently displayed quote at reframeIdxRef.current locked in
-          // so the text NEVER switches 2 seconds after appearing!
           if (options?.preserveVisibleReframe && unlockedRef.current.reframe && prevList.length > 0) {
             const activeSlot = reframeIdxRef.current % prevList.length;
             const currentVisible = prevList[activeSlot];
@@ -1113,7 +1088,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
           updates.category = nextData.detectedCategory as typeof prev.category;
         }
 
-        // 2. Update positiveReframe only if we aren't preserving an already-visible reframe
+        // 2. Update positiveReframe when new AI/contextual reframes arrive
         if (
           nextReaffirmations &&
           nextReaffirmations.length > 0 &&
@@ -1127,32 +1102,6 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
           }
         }
 
-        // 3. Replace any old generic or awkward fallback chip in actionTrio.what
-        if (nextData.what && nextData.what.length > 0) {
-          const oldGenericWhat = new Set([
-            'write 1 small step',
-            'tidy 1 corner',
-            'prepare for 5 mins',
-            'talk to someone',
-          ]);
-          const currentWhat = (prev.actionTrio?.what || '').toLowerCase().trim();
-          const isStaleFallbackChip =
-            oldGenericWhat.has(currentWhat) ||
-            /^(note 1 step on |5m on |spend 5m on )/i.test(currentWhat);
-
-          if (currentWhat && isStaleFallbackChip && !nextData.what.includes(currentWhat)) {
-            updates.actionTrio = {
-              what: nextData.what[0] || '',
-              how:
-                prev.actionTrio?.how === 'step by step' || prev.actionTrio?.how === 'without perfection'
-                  ? nextData.how?.[0] || prev.actionTrio?.how || ''
-                  : prev.actionTrio?.how || '',
-              when: prev.actionTrio?.when || '',
-              completed: prev.actionTrio?.completed,
-            };
-          }
-        }
-
         if (Object.keys(updates).length === 0) return prev;
         return { ...prev, ...updates };
       });
@@ -1163,27 +1112,32 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
   const fetchWorryTrioSuggestions = useCallback(
     async (worryText: string, categoryText: string, force = false) => {
       const trimmed = (worryText || '').trim();
-      if (!trimmed) return;
+      if (!trimmed) {
+        setTrioSuggestions({ what: [], how: [], when: [] });
+        setIsLoadingTrioSuggestions(false);
+        return;
+      }
 
-      const key = `${trimmed.toLowerCase()}`;
-      // Check before applying localContextual so repeated calls never reset AI reframes back to local fallbacks
+      const requestPageId = activePageIdRef.current;
+      const key = `${requestPageId}:${trimmed.toLowerCase()}`;
       if (!force && lastFetchedWorryRef.current === key) return;
       lastFetchedWorryRef.current = key;
 
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const { excludeWhat, excludeQuotes } = getPreviousSessionExclusions();
       const localContextual = getLocalContextualSuggestions(trimmed, categoryText || 'General');
-      if (!unlockedRef.current.reframe) {
-        applyTailoredSuggestions(localContextual);
-      } else {
-        // Only update trio chips & category if Node 2 is already visible
-        applyTailoredSuggestions(
-          {
-            detectedCategory: localContextual.detectedCategory,
-            what: localContextual.what,
-            how: localContextual.how,
-            when: localContextual.when,
-          },
-          { preserveVisibleReframe: true }
-        );
+      const alreadyHasAiForThisWorry = aiResolvedWorryRef.current === key;
+
+      if (!unlockedRef.current.reframe || !alreadyHasAiForThisWorry) {
+        applyTailoredSuggestions(localContextual, {
+          preserveVisibleReframe: alreadyHasAiForThisWorry,
+          isAiTailored: true,
+        });
       }
 
       setIsLoadingTrioSuggestions(true);
@@ -1193,13 +1147,15 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rootWorry: trimmed }),
+        signal: controller.signal,
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((catData) => {
+          if (controller.signal.aborted || activePageIdRef.current !== requestPageId) return;
           if (catData?.detectedCategory && GENTLE_CONTEXTS.includes(catData.detectedCategory)) {
             applyTailoredSuggestions(
               { detectedCategory: catData.detectedCategory },
-              { preserveVisibleReframe: true }
+              { preserveVisibleReframe: true, isAiTailored: false }
             );
           }
         })
@@ -1213,10 +1169,15 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
             rootWorry: trimmed,
             category: localContextual.detectedCategory || categoryText || 'General',
             force,
+            excludeWhat,
+            excludeQuotes,
           }),
+          signal: controller.signal,
         });
+        if (controller.signal.aborted || activePageIdRef.current !== requestPageId) return;
         if (res.ok) {
           const data = await res.json();
+          if (controller.signal.aborted || activePageIdRef.current !== requestPageId) return;
           if (
             Array.isArray(data.what) &&
             data.what.length > 0 &&
@@ -1225,6 +1186,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
             Array.isArray(data.when) &&
             data.when.length > 0
           ) {
+            const shouldPreserveReframe = !force && aiResolvedWorryRef.current === key;
+            aiResolvedWorryRef.current = key;
             applyTailoredSuggestions(
               {
                 detectedCategory: data.detectedCategory,
@@ -1233,30 +1196,103 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                 when: data.when,
                 reaffirmations: Array.isArray(data.reaffirmations) ? data.reaffirmations : undefined,
               },
-              { preserveVisibleReframe: !force }
+              { preserveVisibleReframe: shouldPreserveReframe, isAiTailored: true }
             );
           }
         }
       } catch {
-        // Local contextual suggestions and reaffirmations are already applied
+        if (!controller.signal.aborted && activePageIdRef.current === requestPageId) {
+          applyTailoredSuggestions(localContextual, {
+            preserveVisibleReframe: true,
+            isAiTailored: true,
+          });
+        }
       } finally {
-        setIsLoadingTrioSuggestions(false);
+        if (!controller.signal.aborted && activePageIdRef.current === requestPageId) {
+          setIsLoadingTrioSuggestions(false);
+        }
       }
     },
-    [applyTailoredSuggestions, getLocalContextualSuggestions]
+    [applyTailoredSuggestions, getLocalContextualSuggestions, getPreviousSessionExclusions]
   );
 
-  // Automatically detect context, dilemma reframes, and suggestions only when the worry text itself changes
+  // Complete Session Isolation when switching pages or clicking "begin a new line"
+  useEffect(() => {
+    activePageIdRef.current = page.id;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    lastFetchedWorryRef.current = '';
+    aiResolvedWorryRef.current = '';
+    manualCategoryOverrideRef.current = false;
+    reframeIdxRef.current = 0;
+    setReframeIdx(0);
+    setIsLoadingTrioSuggestions(false);
+    setCustomEventTitle('');
+    setShowCalendarConfirmModal(false);
+
+    // Immediately clear previous page's AI suggestions so stale context never bleeds across sessions
+    setTrioSuggestions({ what: [], how: [], when: [] });
+
+    const currentWorry = (page.rootWorry || '').trim();
+    const hasWorry = currentWorry.length > 0;
+    const hasReframe = Boolean(page.positiveReframe && page.positiveReframe.trim().length > 0);
+    const canAct = page.canActOnWorry || page.canAct;
+    const hasTrio = Boolean(
+      page.actionTrio?.completed ||
+        page.actionTrio?.what?.trim() ||
+        page.actionTrio?.how?.trim() ||
+        page.actionTrio?.when?.trim()
+    );
+    const actNow =
+      page.canActNow ||
+      (page.actionTiming === 'now' ? 'yes' : page.actionTiming === 'later' ? 'no' : null);
+    const knowWhen = page.knowWhenAct;
+
+    const nextUnlocked = {
+      reframe: hasWorry,
+      fork: hasWorry && hasReframe,
+      noActEnd: canAct === 'no',
+      actionTrio: canAct === 'yes',
+      actNowFork: canAct === 'yes' && hasTrio,
+      doNowEnd: canAct === 'yes' && actNow === 'yes',
+      knowWhenFork: canAct === 'yes' && actNow === 'no',
+      scheduleEnd: canAct === 'yes' && actNow === 'no' && knowWhen === 'yes',
+      noBandwidthEnd: canAct === 'yes' && actNow === 'no' && knowWhen === 'no',
+    };
+    unlockedRef.current = nextUnlocked;
+    setUnlocked(nextUnlocked);
+
+    const freshLocal = getLocalContextualSuggestions(currentWorry, page.category || 'General');
+    setWorryReaffirmations(freshLocal.reaffirmations);
+
+    if (currentWorry) {
+      fetchWorryTrioSuggestions(currentWorry, page.category || 'General', true);
+    }
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id]);
+
+  // Automatically detect context, second-person dilemma reframes, and AI suggestions when the worry text changes
   useEffect(() => {
     const trimmed = page.rootWorry?.trim() || '';
-    if (!trimmed) return;
-    const localContextual = getLocalContextualSuggestions(trimmed, 'General');
+    if (!trimmed) {
+      setTrioSuggestions({ what: [], how: [], when: [] });
+      return;
+    }
+    const key = `${page.id}:${trimmed.toLowerCase()}`;
+    const localContextual = getLocalContextualSuggestions(trimmed, page.category || 'General');
     applyTailoredSuggestions(localContextual, {
-      preserveVisibleReframe: lastFetchedWorryRef.current === trimmed.toLowerCase(),
+      preserveVisibleReframe: aiResolvedWorryRef.current === key,
+      isAiTailored: false,
     });
 
     const timer = setTimeout(() => {
-      fetchWorryTrioSuggestions(trimmed, localContextual.detectedCategory || 'General');
+      fetchWorryTrioSuggestions(trimmed, localContextual.detectedCategory || page.category || 'General');
     }, 220);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1269,7 +1305,11 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     worryReaffirmations && worryReaffirmations.length > 0
       ? worryReaffirmations
       : fallbackCategoryReframes;
-  const activeReframeItem = reframeList[reframeIdx % reframeList.length];
+  const rawActiveReframeItem = reframeList[reframeIdx % reframeList.length];
+  const activeReframeItem = {
+    quote: ensureClientSecondPersonQuote(rawActiveReframeItem.quote),
+    sub: rawActiveReframeItem.sub,
+  };
 
   // Smooth horizontal & vertical pan to newly revealed or focused node without clipping
   const panToNode = useCallback(
@@ -1334,7 +1374,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
 
   // Desktop/trackpad grab-to-pan on canvas background while preserving native touch momentum scrolling
   const handleCanvasPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch') return; // Let native 2D touch momentum scrolling & elastic node drag work seamlessly
+    if (e.pointerType === 'touch') return;
     if (e.button !== 0) return;
     const targetEl = e.target as HTMLElement;
     if (targetEl.closest('input, textarea, button, a, label, [data-draggable-node="true"]')) {
@@ -1380,7 +1420,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
     panToNode(step2Ref, 300);
   };
 
-  // Shuffle comforting dilemma reframe only when the user explicitly clicks "another thought"
+  // Shuffle comforting dilemma reframe when the user clicks "another perspective"
   const handleShuffleReframe = () => {
     const next = (reframeIdx + 1) % reframeList.length;
     reframeIdxRef.current = next;
@@ -1390,6 +1430,10 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
       ...prev,
       positiveReframe: `${item.quote} ${item.sub}`,
     }));
+    // If the user has cycled through all current perspectives, ask the AI in the background for a fresh batch
+    if (next === 0 && page.rootWorry?.trim()) {
+      fetchWorryTrioSuggestions(page.rootWorry, page.category || 'General', true);
+    }
   };
 
   // Step 2 -> Step 3 (First Fork: Is this worry something you can act on?)
@@ -1734,13 +1778,59 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
               onChange={(e) => {
                 const nextWorry = e.target.value;
                 manualCategoryOverrideRef.current = false;
+                reframeIdxRef.current = 0;
+                setReframeIdx(0);
+                lastFetchedWorryRef.current = '';
+                aiResolvedWorryRef.current = '';
+
                 const local = getLocalContextualSuggestions(nextWorry, 'General');
+                const chosenReframe = local.reaffirmations[0];
+                setTrioSuggestions({
+                  what: local.what,
+                  how: local.how,
+                  when: local.when,
+                });
+                setWorryReaffirmations(local.reaffirmations);
+
+                // If the user goes back to edit the root worry after filling out downstream branches,
+                // fold back downstream forks & clear old choices/steps so stale answers don't linger
+                const nextUnlocked = {
+                  reframe: Boolean(nextWorry.trim()) && unlockedRef.current.reframe,
+                  fork: false,
+                  noActEnd: false,
+                  actionTrio: false,
+                  actNowFork: false,
+                  doNowEnd: false,
+                  knowWhenFork: false,
+                  scheduleEnd: false,
+                  noBandwidthEnd: false,
+                };
+                unlockedRef.current = nextUnlocked;
+                setUnlocked(nextUnlocked);
+
                 onUpdatePage((prev) => ({
                   ...prev,
                   rootWorry: nextWorry,
                   category: nextWorry.trim()
                     ? (local.detectedCategory as typeof prev.category)
                     : 'General',
+                  positiveReframe:
+                    nextWorry.trim() && chosenReframe
+                      ? `${chosenReframe.quote} ${chosenReframe.sub}`
+                      : '',
+                  canAct: null,
+                  canActOnWorry: null,
+                  canActNow: null,
+                  knowWhenAct: null,
+                  actionTiming: null,
+                  letWorryGoSealed: false,
+                  calendarEventCreated: false,
+                  actionTrio: {
+                    what: '',
+                    how: '',
+                    when: '',
+                    completed: false,
+                  },
                 }));
               }}
               onKeyDown={(e) => {
@@ -1862,8 +1952,15 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
 
               <div
                 onPointerDown={(e) => e.stopPropagation()}
-                className="mt-3 flex items-center justify-center"
+                className="mt-3 flex items-center justify-center gap-3 flex-wrap"
               >
+                <button
+                  type="button"
+                  onClick={handleShuffleReframe}
+                  className="py-1 px-1.5 text-[11.5px] sm:text-[11px] font-serif italic text-zinc-400 hover:text-zinc-800 transition-colors cursor-pointer underline underline-offset-2 touch-manipulation"
+                >
+                  ↻ another perspective
+                </button>
                 <button
                   type="button"
                   onClick={handleReframeContinue}
@@ -1877,33 +1974,46 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
           )}
 
           {/* ========================================================
-              3. FORK 1: "Is this worry something you can act on?"
-              Splits into Upper Curve (Yes) & Lower Curve (No)
+              3. FORK 1: Single question along the main stem,
+              then splits into Upper Curve (Yes) & Lower Curve (No)
           ======================================================== */}
           {unlocked.fork && (
             <div ref={stepForkRef} className="flex items-center shrink-0 relative">
               <svg
-                width="430"
+                width="480"
                 height="380"
-                viewBox="0 0 430 380"
+                viewBox="0 0 480 380"
                 fill="none"
                 className="overflow-visible select-none"
               >
-                {/* Incoming horizontal stem */}
+                {/* Incoming horizontal stem carrying the single fork question */}
                 <motion.path
-                  d="M 0 190 C 35 190, 55 190, 80 190"
+                  id="fork1-stem"
+                  d="M 0 190 C 80 186, 165 194, 255 190"
                   stroke="#18181b"
                   strokeWidth="1.65"
                   strokeLinecap="round"
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
-                  transition={{ pathLength: { duration: 0.4, ease: 'easeOut' } }}
+                  transition={{ pathLength: { duration: 0.75, ease: 'easeOut' } }}
                 />
+
+                {/* Single Question Along the Main Line Before the Split */}
+                <g transform="translate(0, -10)">
+                  <SvgCurvedTypewriter
+                    href="#fork1-stem"
+                    startOffset="6%"
+                    delay={0.45}
+                    speed={0.022}
+                    text="is this something I can act on?"
+                    className="fill-zinc-800 font-serif text-[13.5px] tracking-wide"
+                  />
+                </g>
 
                 {/* UPPER FORK CURVE (Yes - something I can act on) */}
                 <motion.path
                   id="fork1-upper"
-                  d="M 80 190 C 175 188, 270 145, 415 45"
+                  d="M 255 190 C 325 188, 380 135, 465 45"
                   stroke={canActDecision === 'yes' ? '#18181b' : '#52525b'}
                   strokeWidth={canActDecision === 'yes' ? '2.1' : '1.5'}
                   strokeLinecap="round"
@@ -1912,14 +2022,14 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
                   transition={{
-                    pathLength: { duration: 1.25, delay: 0.35, ease: [0.22, 1, 0.36, 1] },
+                    pathLength: { duration: 1.05, delay: 0.7, ease: [0.22, 1, 0.36, 1] },
                   }}
                 />
 
                 {/* LOWER FORK CURVE (No - outside my hands today) */}
                 <motion.path
                   id="fork1-lower"
-                  d="M 80 190 C 175 192, 270 235, 415 335"
+                  d="M 255 190 C 325 192, 380 245, 465 335"
                   stroke={canActDecision === 'no' ? '#18181b' : '#52525b'}
                   strokeWidth={canActDecision === 'no' ? '2.1' : '1.5'}
                   strokeLinecap="round"
@@ -1928,41 +2038,9 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                   initial={{ pathLength: 0 }}
                   animate={{ pathLength: 1 }}
                   transition={{
-                    pathLength: { duration: 1.25, delay: 0.35, ease: [0.22, 1, 0.36, 1] },
+                    pathLength: { duration: 1.05, delay: 0.7, ease: [0.22, 1, 0.36, 1] },
                   }}
                 />
-
-                {/* Curved Text Over Upper Line */}
-                <g
-                  onClick={() => handleForkChoice('yes')}
-                  className="cursor-pointer"
-                  transform="translate(0, -10)"
-                >
-                  <SvgCurvedTypewriter
-                    href="#fork1-upper"
-                    startOffset="7%"
-                    delay={1.15}
-                    speed={0.024}
-                    text="is this something I can act on?"
-                    className="fill-zinc-800 font-serif text-[13.5px] tracking-wide hover:fill-black"
-                  />
-                </g>
-
-                {/* Curved Text Under Lower Line */}
-                <g
-                  onClick={() => handleForkChoice('no')}
-                  className="cursor-pointer"
-                  transform="translate(0, 20)"
-                >
-                  <SvgCurvedTypewriter
-                    href="#fork1-lower"
-                    startOffset="7%"
-                    delay={1.45}
-                    speed={0.024}
-                    text="or is it outside my hands today?"
-                    className="fill-zinc-700 font-serif text-[13.5px] tracking-wide hover:fill-black"
-                  />
-                </g>
               </svg>
 
               {/* Interactive branch tips */}
@@ -1972,7 +2050,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                   onClick={() => handleForkChoice('yes')}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 1.85 }}
+                  transition={{ delay: 1.45 }}
                   className={`px-3.5 py-1.5 sm:px-3 sm:py-1 rounded-full text-[12.5px] sm:text-[12px] font-serif italic transition-all cursor-pointer touch-manipulation ${
                     canActDecision === 'yes'
                       ? 'bg-zinc-900 text-white shadow-xs'
@@ -1987,7 +2065,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                   onClick={() => handleForkChoice('no')}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 2.05 }}
+                  transition={{ delay: 1.6 }}
                   className={`px-3.5 py-1.5 sm:px-3 sm:py-1 rounded-full text-[12.5px] sm:text-[12px] font-serif italic transition-all cursor-pointer touch-manipulation ${
                     canActDecision === 'no'
                       ? 'bg-zinc-900 text-white shadow-xs'
@@ -2104,7 +2182,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
 
           {/* ========================================================
               4B. UPPER BRANCH ("Yes." — Can Act on This Worry)
-              "What can I do about this worry? How? When?"
+              "What can I gently do about this worry? How?"
           ======================================================== */}
           {unlocked.actionTrio && (
             <div className="flex flex-row items-center shrink-0">
@@ -2142,9 +2220,9 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                 </p>
                 <div
                   onPointerDown={(e) => e.stopPropagation()}
-                  className="flex items-center justify-center gap-2 mt-0.5 mb-2.5 flex-wrap sm:flex-nowrap"
+                  className="flex items-center justify-center gap-2.5 mt-0.5 mb-2.5 flex-wrap"
                 >
-                  <p className="text-[12px] font-serif italic text-zinc-500 sm:whitespace-nowrap">
+                  <p className="text-[12px] font-serif italic text-zinc-500">
                     <TypewriterText
                       text="Write one word or tap a suggestion for your worry below."
                       delay={1.65}
@@ -2152,7 +2230,7 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                     />
                   </p>
                   {isLoadingTrioSuggestions ? (
-                    <span className="text-[10.5px] font-serif italic text-zinc-400 animate-pulse whitespace-nowrap shrink-0">
+                    <span className="text-[10.5px] font-serif italic text-zinc-400 animate-pulse whitespace-nowrap">
                       (tailoring...)
                     </span>
                   ) : (
@@ -2166,14 +2244,14 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                         )
                       }
                       title="Refresh AI suggestions for your worry"
-                      className="inline-flex items-center gap-1 py-0.5 px-1 text-[11px] sm:text-[10.5px] font-serif italic text-zinc-400 hover:text-zinc-800 transition-colors cursor-pointer underline underline-offset-2 whitespace-nowrap shrink-0 touch-manipulation"
+                      className="inline-flex items-center gap-1 py-0.5 px-1 text-[11px] sm:text-[10.5px] font-serif italic text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer underline underline-offset-2 whitespace-nowrap touch-manipulation"
                     >
                       <span>↻ refresh</span>
                     </button>
                   )}
                 </div>
 
-                {/* 2 Compact Journal Notes in a Horizontal Row with Left-Aligned AI Suggestion Chips */}
+                {/* 2 Compact Journal Notes in a Horizontal Row with Left-Aligned AI-Tailored Suggestion Chips */}
                 <div
                   onPointerDown={(e) => e.stopPropagation()}
                   className="grid grid-cols-2 gap-2.5 sm:gap-3 text-left items-stretch"
@@ -2215,29 +2293,35 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       />
                     </div>
                     <div className="flex flex-col items-start justify-start gap-1.5 mt-2.5 w-full text-left">
-                      {trioSuggestions.what.map((word) => (
-                        <button
-                          key={word}
-                          type="button"
-                          onClick={() =>
-                            onUpdatePage((prev) => ({
-                              ...prev,
-                              actionTrio: {
-                                what: word,
-                                how: prev.actionTrio?.how || '',
-                                when: prev.actionTrio?.when || '',
-                              },
-                            }))
-                          }
-                          className={`inline-flex items-center justify-start text-left px-2.5 py-1 sm:px-2 sm:py-0.5 rounded text-[11px] sm:text-[10px] font-serif italic transition-colors cursor-pointer touch-manipulation ${
-                            page.actionTrio?.what?.toLowerCase() === word.toLowerCase()
-                              ? 'bg-zinc-900 text-white'
-                              : 'bg-zinc-100/90 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70'
-                          }`}
-                        >
-                          {word}
-                        </button>
-                      ))}
+                      {trioSuggestions.what.length > 0 ? (
+                        trioSuggestions.what.map((word) => (
+                          <button
+                            key={word}
+                            type="button"
+                            onClick={() =>
+                              onUpdatePage((prev) => ({
+                                ...prev,
+                                actionTrio: {
+                                  what: word,
+                                  how: prev.actionTrio?.how || '',
+                                  when: prev.actionTrio?.when || '',
+                                },
+                              }))
+                            }
+                            className={`inline-flex items-center justify-start text-left px-2.5 py-1 sm:px-2 sm:py-0.5 rounded text-[11px] sm:text-[10px] font-serif italic transition-colors cursor-pointer touch-manipulation ${
+                              page.actionTrio?.what?.toLowerCase() === word.toLowerCase()
+                                ? 'bg-zinc-900 text-white'
+                                : 'bg-zinc-100/90 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70'
+                            }`}
+                          >
+                            {word}
+                          </button>
+                        ))
+                      ) : isLoadingTrioSuggestions ? (
+                        <span className="text-[10.5px] font-serif italic text-zinc-400 animate-pulse py-1">
+                          tailoring steps to your worry...
+                        </span>
+                      ) : null}
                     </div>
                   </div>
 
@@ -2281,29 +2365,35 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       />
                     </div>
                     <div className="flex flex-col items-start justify-start gap-1.5 mt-2.5 w-full text-left">
-                      {trioSuggestions.how.map((word) => (
-                        <button
-                          key={word}
-                          type="button"
-                          onClick={() =>
-                            onUpdatePage((prev) => ({
-                              ...prev,
-                              actionTrio: {
-                                what: prev.actionTrio?.what || '',
-                                how: word,
-                                when: prev.actionTrio?.when || '',
-                              },
-                            }))
-                          }
-                          className={`inline-flex items-center justify-start text-left px-2.5 py-1 sm:px-2 sm:py-0.5 rounded text-[11px] sm:text-[10px] font-serif italic transition-colors cursor-pointer touch-manipulation ${
-                            page.actionTrio?.how?.toLowerCase() === word.toLowerCase()
-                              ? 'bg-zinc-900 text-white'
-                              : 'bg-zinc-100/90 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70'
-                          }`}
-                        >
-                          {word}
-                        </button>
-                      ))}
+                      {trioSuggestions.how.length > 0 ? (
+                        trioSuggestions.how.map((word) => (
+                          <button
+                            key={word}
+                            type="button"
+                            onClick={() =>
+                              onUpdatePage((prev) => ({
+                                ...prev,
+                                actionTrio: {
+                                  what: prev.actionTrio?.what || '',
+                                  how: word,
+                                  when: prev.actionTrio?.when || '',
+                                },
+                              }))
+                            }
+                            className={`inline-flex items-center justify-start text-left px-2.5 py-1 sm:px-2 sm:py-0.5 rounded text-[11px] sm:text-[10px] font-serif italic transition-colors cursor-pointer touch-manipulation ${
+                              page.actionTrio?.how?.toLowerCase() === word.toLowerCase()
+                                ? 'bg-zinc-900 text-white'
+                                : 'bg-zinc-100/90 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/70'
+                            }`}
+                          >
+                            {word}
+                          </button>
+                        ))
+                      ) : isLoadingTrioSuggestions ? (
+                        <span className="text-[10.5px] font-serif italic text-zinc-400 animate-pulse py-1">
+                          tailoring approach...
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -2347,33 +2437,45 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
               </motion.div>
 
               {/* ========================================================
-                  5. FORK 2: "Can you act on this worry now?"
-                  Upper Curve (Yes -> Take first step)
-                  Lower Curve (No -> Do you know when you can act on it?)
+                  5. FORK 2: Single question along the main stem,
+                  then splits into Upper Curve (Yes) & Lower Curve (No)
               ======================================================== */}
               {unlocked.actNowFork && (
                 <div ref={stepActNowForkRef} className="flex flex-row items-center shrink-0">
                   <svg
-                    width="320"
+                    width="420"
                     height="260"
-                    viewBox="0 0 320 260"
+                    viewBox="0 0 420 260"
                     fill="none"
                     className="overflow-visible select-none"
                   >
                     <motion.path
-                      d="M 0 130 L 55 130"
+                      id="fork2-stem"
+                      d="M 0 130 C 75 127, 155 133, 235 130"
                       stroke="#18181b"
                       strokeWidth="1.6"
                       strokeLinecap="round"
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 0.35 } }}
+                      transition={{ pathLength: { duration: 0.7 } }}
                     />
+
+                    {/* Single Question Along the Main Line Before the Split */}
+                    <g transform="translate(0, -10)">
+                      <SvgCurvedTypewriter
+                        href="#fork2-stem"
+                        startOffset="6%"
+                        delay={0.45}
+                        speed={0.022}
+                        text="can I act on this right now?"
+                        className="fill-zinc-800 font-serif text-[12.5px] italic"
+                      />
+                    </g>
 
                     {/* Upper Curve: Yes, I can act now */}
                     <motion.path
                       id="act-now-yes-curve"
-                      d="M 55 130 C 125 128, 195 92, 305 42"
+                      d="M 235 130 C 290 128, 340 92, 405 42"
                       stroke={actNowDecision === 'yes' ? '#18181b' : '#71717a'}
                       strokeWidth={actNowDecision === 'yes' ? '2.0' : '1.45'}
                       strokeLinecap="round"
@@ -2381,13 +2483,13 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       onClick={() => handleActNowChoice('yes')}
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 1.05, delay: 0.3 } }}
+                      transition={{ pathLength: { duration: 0.95, delay: 0.65 } }}
                     />
 
                     {/* Lower Curve: No, not right now */}
                     <motion.path
                       id="act-now-no-curve"
-                      d="M 55 130 C 125 132, 195 168, 305 218"
+                      d="M 235 130 C 290 132, 340 168, 405 218"
                       stroke={actNowDecision === 'no' ? '#18181b' : '#71717a'}
                       strokeWidth={actNowDecision === 'no' ? '2.0' : '1.45'}
                       strokeLinecap="round"
@@ -2395,38 +2497,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       onClick={() => handleActNowChoice('no')}
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 1.05, delay: 0.3 } }}
+                      transition={{ pathLength: { duration: 0.95, delay: 0.65 } }}
                     />
-
-                    <g
-                      onClick={() => handleActNowChoice('yes')}
-                      className="cursor-pointer"
-                      transform="translate(0, -8)"
-                    >
-                      <SvgCurvedTypewriter
-                        href="#act-now-yes-curve"
-                        startOffset="10%"
-                        delay={0.95}
-                        speed={0.025}
-                        text="can I act on this right now?"
-                        className="fill-zinc-800 font-serif text-[12.5px] italic"
-                      />
-                    </g>
-
-                    <g
-                      onClick={() => handleActNowChoice('no')}
-                      className="cursor-pointer"
-                      transform="translate(0, 17)"
-                    >
-                      <SvgCurvedTypewriter
-                        href="#act-now-no-curve"
-                        startOffset="10%"
-                        delay={1.2}
-                        speed={0.025}
-                        text="or not right at this moment?"
-                        className="fill-zinc-700 font-serif text-[12.5px] italic"
-                      />
-                    </g>
                   </svg>
 
                   <div className="flex flex-col justify-between h-[195px] -ml-2 z-10">
@@ -2548,33 +2620,45 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
               )}
 
               {/* ========================================================
-                  6. FORK 3 ("No, not now" -> "Do you know when you can act on it?")
-                  Upper Curve (Yes -> Schedule it)
-                  Lower Curve (No -> No bandwidth right now)
+                  6. FORK 3: Single question along the main stem,
+                  then splits into Upper Curve (Yes -> Schedule) & Lower Curve (No)
               ======================================================== */}
               {unlocked.knowWhenFork && (
                 <div ref={stepKnowWhenForkRef} className="flex flex-row items-center shrink-0">
                   <svg
-                    width="340"
+                    width="435"
                     height="260"
-                    viewBox="0 0 340 260"
+                    viewBox="0 0 435 260"
                     fill="none"
                     className="overflow-visible select-none"
                   >
                     <motion.path
-                      d="M 0 130 L 55 130"
+                      id="fork3-stem"
+                      d="M 0 130 C 80 127, 165 133, 250 130"
                       stroke="#18181b"
                       strokeWidth="1.6"
                       strokeLinecap="round"
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 0.35 } }}
+                      transition={{ pathLength: { duration: 0.7 } }}
                     />
+
+                    {/* Single Question Along the Main Line Before the Split */}
+                    <g transform="translate(0, -10)">
+                      <SvgCurvedTypewriter
+                        href="#fork3-stem"
+                        startOffset="5%"
+                        delay={0.45}
+                        speed={0.022}
+                        text="do I know when I can act on it?"
+                        className="fill-zinc-800 font-serif text-[12.5px] italic"
+                      />
+                    </g>
 
                     {/* Upper Curve: Yes, I know when -> Schedule it */}
                     <motion.path
                       id="know-when-yes-curve"
-                      d="M 55 130 C 130 128, 205 92, 325 42"
+                      d="M 250 130 C 305 128, 355 92, 420 42"
                       stroke={knowWhenDecision === 'yes' ? '#18181b' : '#71717a'}
                       strokeWidth={knowWhenDecision === 'yes' ? '2.0' : '1.45'}
                       strokeLinecap="round"
@@ -2582,13 +2666,13 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       onClick={() => handleKnowWhenChoice('yes')}
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 1.05, delay: 0.3 } }}
+                      transition={{ pathLength: { duration: 0.95, delay: 0.65 } }}
                     />
 
                     {/* Lower Curve: No, I don't have the bandwidth/opportunity yet */}
                     <motion.path
                       id="know-when-no-curve"
-                      d="M 55 130 C 130 132, 205 168, 325 218"
+                      d="M 250 130 C 305 132, 355 168, 420 218"
                       stroke={knowWhenDecision === 'no' ? '#18181b' : '#71717a'}
                       strokeWidth={knowWhenDecision === 'no' ? '2.0' : '1.45'}
                       strokeLinecap="round"
@@ -2596,38 +2680,8 @@ export const WorryTreeCanvas: React.FC<WorryTreeCanvasProps> = ({
                       onClick={() => handleKnowWhenChoice('no')}
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: 1 }}
-                      transition={{ pathLength: { duration: 1.05, delay: 0.3 } }}
+                      transition={{ pathLength: { duration: 0.95, delay: 0.65 } }}
                     />
-
-                    <g
-                      onClick={() => handleKnowWhenChoice('yes')}
-                      className="cursor-pointer"
-                      transform="translate(0, -8)"
-                    >
-                      <SvgCurvedTypewriter
-                        href="#know-when-yes-curve"
-                        startOffset="8%"
-                        delay={0.95}
-                        speed={0.024}
-                        text="do I know when I can act on it?"
-                        className="fill-zinc-800 font-serif text-[12.5px] italic"
-                      />
-                    </g>
-
-                    <g
-                      onClick={() => handleKnowWhenChoice('no')}
-                      className="cursor-pointer"
-                      transform="translate(0, 17)"
-                    >
-                      <SvgCurvedTypewriter
-                        href="#know-when-no-curve"
-                        startOffset="8%"
-                        delay={1.2}
-                        speed={0.024}
-                        text="or no bandwidth or opening yet?"
-                        className="fill-zinc-700 font-serif text-[12.5px] italic"
-                      />
-                    </g>
                   </svg>
 
                   <div className="flex flex-col justify-between h-[195px] -ml-2 z-10">

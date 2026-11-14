@@ -18,8 +18,22 @@ function createFreshBlankPage(): DiaryPage {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return {
     ...INITIAL_DIARY_PAGES[0],
-    id: `page-${Date.now()}`,
+    id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     date: dateStr,
+    rootWorry: '',
+    category: 'General',
+    positiveReframe: '',
+    positiveReframeOptions: [],
+    canAct: null,
+    canActOnWorry: null,
+    canActNow: null,
+    knowWhenAct: null,
+    actionTrio: {
+      what: '',
+      when: '',
+      how: '',
+      completed: false,
+    },
   };
 }
 
@@ -112,7 +126,7 @@ export default function App() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const newPage: DiaryPage = {
-      id: `page-${Date.now()}`,
+      id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: 'Untitled Reflection',
       date: dateStr,
       category: 'General',
@@ -121,8 +135,12 @@ export default function App() {
       triggerContext: '',
       situationEvent: '',
       mindStory: '',
+      positiveReframe: '',
+      positiveReframeOptions: [],
       canAct: null,
       canActOnWorry: null,
+      canActNow: null,
+      knowWhenAct: null,
       decisionNeeded: null,
       activePathway: null,
       makeDecision: {
@@ -282,6 +300,7 @@ export default function App() {
           <WorryTreeCanvas
             key={activePage.id}
             page={activePage}
+            otherPages={pages.filter((p) => p.id !== activePage.id)}
             onUpdatePage={handleUpdateActivePage}
             onNewPage={handleCreateNewPage}
             onOpenExportPreview={() => setExportPreviewPage(activePage)}
