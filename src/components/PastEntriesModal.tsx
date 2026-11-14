@@ -11,6 +11,7 @@ interface PastEntriesModalProps {
   onSelectPage: (id: string) => void;
   onNewPage: () => void;
   onDeletePage?: (id: string) => void;
+  onClearAllPages?: () => void;
   onPreviewExportPage?: (page: DiaryPage) => void;
 }
 
@@ -31,6 +32,7 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
   onSelectPage,
   onNewPage,
   onDeletePage,
+  onClearAllPages,
   onPreviewExportPage,
 }) => {
   return (
@@ -65,7 +67,17 @@ export const PastEntriesModal: React.FC<PastEntriesModalProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center">
+              <div className="flex items-center gap-3">
+                {pages.length > 0 && onClearAllPages && (
+                  <button
+                    type="button"
+                    onClick={onClearAllPages}
+                    className="text-[11.5px] font-serif italic text-zinc-400 hover:text-rose-600 underline underline-offset-2 transition-colors cursor-pointer"
+                    title="Clear all past lines"
+                  >
+                    clear all
+                  </button>
+                )}
                 <button
                   onClick={onClose}
                   className="p-1 text-zinc-400 hover:text-zinc-900 transition-colors cursor-pointer"

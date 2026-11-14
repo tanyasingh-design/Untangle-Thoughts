@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Plus,
@@ -10,9 +10,59 @@ import { PastEntriesModal } from './components/PastEntriesModal';
 import { PostcardExportModal } from './components/PostcardExportModal';
 import { PanicSomaticOverlay } from './components/overlays/PanicSomaticOverlay';
 import { ClinicalGuideModal } from './components/overlays/ClinicalGuideModal';
+import { WelcomeLetterModal } from './components/overlays/WelcomeLetterModal';
 
 const STORAGE_KEY = 'decenter_worry_diary_pages_v6';
+const DELETED_IDS_KEY = 'decenter_worry_deleted_ids_v1';
+const WELCOME_LETTER_KEY = 'untangle_welcome_letter_seen_v1';
 const LEGACY_SAMPLE_PAGE_IDS = new Set(['page-designer', 'page-milestone', 'page-rent']);
+
+function loadDeletedPageIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_IDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((id): id is string => typeof id === 'string'));
+      }
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return new Set();
+}
+
+function saveDeletedPageIds(ids: Set<string>): void {
+  try {
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(ids)));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function savePagesToLocalStorage(pagesToSave: DiaryPage[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(pagesToSave));
+  } catch {
+    // Fallback if signatureDrawing base64 data exceeds storage quota: strip heavy base64 images so metadata & deletions always persist
+    try {
+      const lightweight = pagesToSave.map((p) =>
+        p.signOffWorry?.signatureDrawing
+          ? {
+              ...p,
+              signOffWorry: {
+                ...p.signOffWorry,
+                signatureDrawing: undefined,
+              },
+            }
+          : p
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(lightweight));
+    } catch (err) {
+      console.warn('Failed to save to local storage:', err);
+    }
+  }
+}
 
 function createFreshBlankPage(): DiaryPage {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -38,10 +88,13 @@ function createFreshBlankPage(): DiaryPage {
 }
 
 export default function App() {
+  const deletedPageIdsRef = useRef<Set<string>>(loadDeletedPageIds());
+
   const [pages, setPages] = useState<DiaryPage[]>(() => {
+    const deletedSet = deletedPageIdsRef.current;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           const userPages = parsed.filter(
@@ -49,11 +102,11 @@ export default function App() {
               item &&
               typeof item === 'object' &&
               typeof item.id === 'string' &&
-              !LEGACY_SAMPLE_PAGE_IDS.has(item.id)
+              !LEGACY_SAMPLE_PAGE_IDS.has(item.id) &&
+              !deletedSet.has(item.id)
           );
-          if (userPages.length > 0) {
-            return userPages;
-          }
+          // Respect empty array if the user intentionally deleted all their past lines
+          return userPages;
         }
       }
     } catch (e) {
@@ -66,6 +119,15 @@ export default function App() {
     return pages[0]?.id || '';
   });
 
+  const [showWelcomeLetter, setShowWelcomeLetter] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(WELCOME_LETTER_KEY) !== 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [welcomeLetterStartUnfolded, setWelcomeLetterStartUnfolded] = useState<boolean>(false);
+
   const [showQuickCalm, setShowQuickCalm] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showPastEntriesModal, setShowPastEntriesModal] = useState(false);
@@ -74,40 +136,61 @@ export default function App() {
   const activePage = pages.find((p) => p.id === activePageId) || pages[0] || null;
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
-    } catch (e) {
-      console.warn('Failed to save to local storage:', e);
-    }
+    const filtered = pages.filter((p) => !deletedPageIdsRef.current.has(p.id));
+    savePagesToLocalStorage(filtered);
   }, [pages]);
 
   useEffect(() => {
     if (!activePage) return;
     const timer = setInterval(() => {
-      setPages((prevPages) =>
-        prevPages.map((p) => {
-          if (p.id === activePage.id) {
-            return {
-              ...p,
-              sessionDurationMinutes: (p.sessionDurationMinutes || 0) + 1,
-            };
-          }
-          return p;
-        })
-      );
+      setPages((prevPages) => {
+        const next = prevPages
+          .filter((p) => !deletedPageIdsRef.current.has(p.id))
+          .map((p) => {
+            if (p.id === activePage.id) {
+              return {
+                ...p,
+                sessionDurationMinutes: (p.sessionDurationMinutes || 0) + 1,
+              };
+            }
+            return p;
+          });
+        savePagesToLocalStorage(next);
+        return next;
+      });
     }, 60000);
     return () => clearInterval(timer);
   }, [activePage?.id]);
 
+  const handleCloseWelcomeLetter = useCallback(() => {
+    setShowWelcomeLetter(false);
+    try {
+      localStorage.setItem(WELCOME_LETTER_KEY, 'true');
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleOpenWelcomeLetter = useCallback((startUnfolded = false) => {
+    setWelcomeLetterStartUnfolded(startUnfolded);
+    setShowWelcomeLetter(true);
+  }, []);
+
   const handleUpdateActivePage = useCallback(
     (updated: DiaryPage | ((prev: DiaryPage) => DiaryPage)) => {
       setPages((prev) => {
+        const cleanPrev = prev.filter((p) => !deletedPageIdsRef.current.has(p.id));
+        if (cleanPrev.length === 0) return cleanPrev;
+
         let targetId = activePageId;
-        if (!prev.some((p) => p.id === targetId) && prev.length > 0) {
-          targetId = prev[0].id;
-          setActivePageId(targetId);
+        if (!cleanPrev.some((p) => p.id === targetId)) {
+          targetId = cleanPrev[0].id;
         }
-        return prev.map((p) => {
+        if (deletedPageIdsRef.current.has(targetId)) {
+          return cleanPrev;
+        }
+
+        const nextPages = cleanPrev.map((p) => {
           if (p.id === targetId) {
             const next = typeof updated === 'function' ? updated(p) : updated;
             if (next.id && next.id !== targetId) {
@@ -117,6 +200,8 @@ export default function App() {
           }
           return p;
         });
+        savePagesToLocalStorage(nextPages);
+        return nextPages;
       });
     },
     [activePageId]
@@ -178,20 +263,47 @@ export default function App() {
       },
     };
 
-    setPages((prev) => [newPage, ...prev]);
+    setPages((prev) => {
+      const next = [newPage, ...prev.filter((p) => !deletedPageIdsRef.current.has(p.id))];
+      savePagesToLocalStorage(next);
+      return next;
+    });
     setActivePageId(newPage.id);
   }, []);
 
-  // Allow deleting any page, including the very last one
-  const handleDeletePage = (pageId: string) => {
-    const remaining = pages.filter((p) => p.id !== pageId);
-    setPages(remaining);
-    if (remaining.length === 0) {
-      setActivePageId('');
-    } else if (activePageId === pageId) {
-      setActivePageId(remaining[0].id);
-    }
-  };
+  // Permanently delete a page and synchronously persist both the updated list and tombstone ID
+  const handleDeletePage = useCallback((pageId: string) => {
+    deletedPageIdsRef.current.add(pageId);
+    saveDeletedPageIds(deletedPageIdsRef.current);
+
+    setPages((prev) => {
+      const remaining = prev.filter(
+        (p) => p.id !== pageId && !deletedPageIdsRef.current.has(p.id)
+      );
+      savePagesToLocalStorage(remaining);
+
+      setActivePageId((prevActiveId) => {
+        if (remaining.length === 0) return '';
+        if (prevActiveId === pageId || !remaining.some((p) => p.id === prevActiveId)) {
+          return remaining[0].id;
+        }
+        return prevActiveId;
+      });
+
+      return remaining;
+    });
+  }, []);
+
+  // Permanently clear all past lines and synchronously persist empty state
+  const handleClearAllPages = useCallback(() => {
+    setPages((prev) => {
+      prev.forEach((p) => deletedPageIdsRef.current.add(p.id));
+      saveDeletedPageIds(deletedPageIdsRef.current);
+      savePagesToLocalStorage([]);
+      return [];
+    });
+    setActivePageId('');
+  }, []);
 
   const [isHeartHovered, setIsHeartHovered] = useState(false);
   const [heartClickCount, setHeartClickCount] = useState(0);
@@ -385,13 +497,18 @@ export default function App() {
         <div
           onMouseEnter={() => setIsHeartHovered(true)}
           onMouseLeave={() => setIsHeartHovered(false)}
-          onClick={() => setHeartClickCount((c) => c + 1)}
+          onClick={() => {
+            setHeartClickCount((c) => c + 1);
+            handleOpenWelcomeLetter(false);
+          }}
           role="button"
           tabIndex={0}
+          title="Read a personal letter from Tanya Singh"
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               setHeartClickCount((c) => c + 1);
+              handleOpenWelcomeLetter(false);
             }
           }}
           className="group relative inline-flex items-center justify-center gap-2 py-1 px-4 text-[13px] font-serif italic text-zinc-500 hover:text-zinc-900 transition-colors cursor-pointer"
@@ -487,6 +604,7 @@ export default function App() {
         onSelectPage={setActivePageId}
         onNewPage={handleCreateNewPage}
         onDeletePage={handleDeletePage}
+        onClearAllPages={handleClearAllPages}
         onPreviewExportPage={(p) => {
           setShowPastEntriesModal(false);
           setExportPreviewPage(p);
@@ -510,6 +628,13 @@ export default function App() {
       <ClinicalGuideModal
         isOpen={showGuideModal}
         onClose={() => setShowGuideModal(false)}
+      />
+
+      {/* Warm Personal Letter Opener & Onboarding Modal */}
+      <WelcomeLetterModal
+        isOpen={showWelcomeLetter}
+        onClose={handleCloseWelcomeLetter}
+        startUnfolded={welcomeLetterStartUnfolded}
       />
     </div>
   );
